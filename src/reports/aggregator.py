@@ -1,4 +1,5 @@
 import os
+import re
 import psycopg2
 import psycopg2.extras
 from collections import defaultdict
@@ -20,9 +21,35 @@ def get_db_connection():
         password=os.getenv("POSTGRES_PASSWORD")
     )
 
+def _compile_brand_patterns(brands: list) -> list:
+    """Crea patrones regex robustos (case-insensitive, con límites de palabra) para detectar marcas."""
+    patterns = []
+    for brand in brands:
+        if not brand:
+            continue
+        # Escapar caracteres especiales y permitir espacios variables
+        escaped = re.escape(brand.strip())
+        # Usar límites de palabra cuando sea razonable; caer a coincidencia flexible
+        pattern = re.compile(rf"(?i)(?<!\w){escaped}(?!\w)")
+        patterns.append((brand, pattern))
+    return patterns
+
+
+def detectar_marcas(texto: str, marcas: list) -> list:
+    """Devuelve la lista de marcas detectadas en el texto (coincidencias únicas por mención)."""
+    if not texto:
+        return []
+    found = set()
+    for original, pattern in _compile_brand_patterns(marcas):
+        if pattern.search(texto or ""):
+            found.add(original)
+    return list(found)
+
+
 def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, end_date: str) -> dict:
     """
     Recopila, agrega y calcula KPIs desde la base de datos para el informe.
+    Incluye: SOV total, menciones de competidores y SOV por categoría (cliente/total).
     """
     print(f"Agregando datos y calculando KPIs para el cliente {client_id}...")
     conn = get_db_connection()
@@ -39,11 +66,44 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
         "kpis": {
             "total_mentions": 0,
             "average_sentiment": 0.0,
-            "sentiment_by_category": defaultdict(lambda: {'sum': 0, 'count': 0})
+            "sentiment_by_category": defaultdict(lambda: {'sum': 0, 'count': 0}),
+            # Métricas de visibilidad (legado)
+            "mentions_by_category_count": defaultdict(int),
+            "share_of_voice_by_category": {},
+            "visibility_index": 0.0,
+            # NUEVOS KPIs basados en marcas
+            "share_of_voice": 0.0,
+            "competitor_mentions": defaultdict(int),
+            "sov_by_category": defaultdict(lambda: {"client": 0, "total": 0}),
         }
     }
 
     try:
+        # Obtener datos de mercado y cliente (competidores y nombre de cliente como marca base)
+        cur.execute("SELECT name FROM clients WHERE id = %s;", (client_id,))
+        client_row = cur.fetchone()
+        client_name = client_row[0] if client_row else ""
+
+        cur.execute("SELECT competitors FROM markets WHERE id = %s AND client_id = %s;", (market_id, client_id))
+        market_row = cur.fetchone()
+        market_competitors = []
+        if market_row and market_row[0] is not None:
+            # Puede venir como lista JSON o dict dependiente; normalizar a lista de strings
+            comp = market_row[0]
+            if isinstance(comp, list):
+                market_competitors = [str(c) for c in comp]
+            else:
+                try:
+                    # psycopg2 ya parsea JSONB a tipos python; fallback defensivo
+                    market_competitors = [str(c) for c in list(comp)]
+                except Exception:
+                    market_competitors = []
+
+        # Exponer metadatos para etapas posteriores (prompts, PDF)
+        aggregated_data["client_name"] = client_name
+        aggregated_data["market_competitors"] = market_competitors
+
+        # Query de menciones con categoría
         cur.execute("""
             SELECT
                 pc.name as category_name,
@@ -81,13 +141,41 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
             kpi_cat = aggregated_data["kpis"]["sentiment_by_category"][category]
             kpi_cat['sum'] += sentiment
             kpi_cat['count'] += 1
+            aggregated_data["kpis"]["mentions_by_category_count"][category] += 1
+
+            # --- Detección de marcas para SOV ---
+            detected_brands = detectar_marcas(row['summary'], [client_name] + market_competitors)
+            if detected_brands:
+                for brand in detected_brands:
+                    if brand == client_name:
+                        aggregated_data["kpis"]["sov_by_category"][category]["client"] += 1
+                    else:
+                        aggregated_data["kpis"]["competitor_mentions"][brand] += 1
+                    aggregated_data["kpis"]["sov_by_category"][category]["total"] += 1
 
         # Finalizar cálculos
-        aggregated_data["kpis"]["average_sentiment"] = float(total_sentiment) / float(len(rows))
+        total_mentions = float(len(rows))
+        aggregated_data["kpis"]["average_sentiment"] = float(total_sentiment) / total_mentions
+        aggregated_data["kpis"]["visibility_index"] = total_mentions
         
         # Calcular la media de sentimiento por categoría
         for category, values in aggregated_data["kpis"]["sentiment_by_category"].items():
             values['average'] = float(values['sum']) / float(values['count']) if values['count'] > 0 else 0.0
+
+        # Métrica legada: % de visibilidad por categoría (del total de menciones)
+        sov_legacy = {}
+        for category, count in aggregated_data["kpis"]["mentions_by_category_count"].items():
+            sov_legacy[category] = (float(count) / total_mentions) * 100.0 if total_mentions > 0 else 0.0
+        aggregated_data["kpis"]["share_of_voice_by_category"] = sov_legacy
+
+        # Calcular SOV total basado en marcas detectadas
+        total_client_mentions = sum(cat_counts["client"] for cat_counts in aggregated_data["kpis"]["sov_by_category"].values())
+        total_competitor_mentions = sum(aggregated_data["kpis"]["competitor_mentions"].values())
+        total_mentions_with_brands = float(total_client_mentions + total_competitor_mentions)
+        if total_mentions_with_brands > 0:
+            aggregated_data["kpis"]["share_of_voice"] = (float(total_client_mentions) / total_mentions_with_brands) * 100.0
+        else:
+            aggregated_data["kpis"]["share_of_voice"] = 0.0
 
         print(f"Datos agregados: {len(rows)} menciones, sentimiento promedio: {aggregated_data['kpis']['average_sentiment']:.2f}")
 

@@ -67,6 +67,9 @@ def seed_data():
     print("🌱 Empezando a poblar la base de datos con datos de prueba...")
 
     try:
+        # Asegurar columna 'competitors' en markets (idempotente)
+        cur.execute("ALTER TABLE markets ADD COLUMN IF NOT EXISTS competitors JSONB;")
+
         # 1. Insertar Cliente
         cur.execute("INSERT INTO clients (name, api_keys) VALUES (%s, %s) ON CONFLICT (name) DO NOTHING RETURNING id;",
                     (CLIENT_DATA["name"], Json(CLIENT_DATA["api_keys"])))

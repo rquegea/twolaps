@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS markets (
     client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    competitors JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(client_id, name)
 );

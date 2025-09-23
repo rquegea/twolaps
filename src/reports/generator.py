@@ -5,6 +5,9 @@ from src.reports.prompts import (
     get_insight_extraction_prompt,
     get_strategic_plan_prompt,
     get_strategic_summary_prompt,
+    get_executive_summary_prompt,
+    get_competitive_analysis_prompt,
+    get_deep_dive_analysis_prompt,
 )
 
 def generate_report_content(aggregated_data: dict) -> dict:
@@ -15,7 +18,7 @@ def generate_report_content(aggregated_data: dict) -> dict:
     - Fase 3: Redacción del anexo detallado por categorías
     """
     mentions_by_category = aggregated_data.get("mentions_by_category", {})
-    all_summaries = aggregated_data.get("all_summaries", [])
+    # all_summaries no se usa en la versión con deep dive basado en KPIs
     kpis = aggregated_data.get("kpis", {})
 
     print("Generando contenido del informe híbrido con IA avanzada...")
@@ -59,12 +62,22 @@ def generate_report_content(aggregated_data: dict) -> dict:
     # Fase 2: Contenido Estratégico
     # -------------------------
     report_content = {"strategic": {}, "detailed": {}}
+    # Resumen Ejecutivo (basado en KPIs enriquecidos)
+    try:
+        exec_prompt = get_executive_summary_prompt(aggregated_data)
+        executive_summary, _ = fetch_openai_response(exec_prompt, model="gpt-4o")
+        report_content["strategic"]["Resumen Ejecutivo"] = executive_summary
+    except Exception as e:
+        print(f"Error generando Resumen Ejecutivo (KPIs): {e}")
+        report_content["strategic"]["Resumen Ejecutivo"] = ""
+
+    # Resumen Ejecutivo y Hallazgos (opcional, basado en insights JSON)
     try:
         summary_prompt = get_strategic_summary_prompt(insights_data)
         strategic_summary, _ = fetch_openai_response(summary_prompt, model="gpt-4o")
         report_content["strategic"]["Resumen Ejecutivo y Hallazgos"] = strategic_summary
     except Exception as e:
-        print(f"Error generando Resumen Ejecutivo: {e}")
+        print(f"Error generando Resumen Ejecutivo (insights): {e}")
         report_content["strategic"]["Resumen Ejecutivo y Hallazgos"] = ""
 
     try:
@@ -75,6 +88,15 @@ def generate_report_content(aggregated_data: dict) -> dict:
         print(f"Error generando Plan de Acción: {e}")
         report_content["strategic"]["Plan de Acción Estratégico"] = ""
 
+    # Análisis Competitivo
+    try:
+        comp_prompt = get_competitive_analysis_prompt(aggregated_data)
+        comp_text, _ = fetch_openai_response(comp_prompt, model="gpt-4o")
+        report_content["strategic"]["Análisis Competitivo"] = comp_text
+    except Exception as e:
+        print(f"Error generando Análisis Competitivo: {e}")
+        report_content["strategic"]["Análisis Competitivo"] = ""
+
     # -------------------------
     # Fase 3: Contenido Detallado (Anexo)
     # -------------------------
@@ -82,7 +104,7 @@ def generate_report_content(aggregated_data: dict) -> dict:
         if not data:
             continue
         print(f"  - Analizando categoría para anexo: {category_name}")
-        prompt = get_detailed_category_prompt(category_name, data, all_summaries, kpis)
+        prompt = get_deep_dive_analysis_prompt(category_name, data, kpis, aggregated_data.get("client_name", "Nuestra marca"))
         analysis_text, _ = fetch_openai_response(prompt, model="gpt-4o")
         report_content["detailed"][category_name] = analysis_text
 
