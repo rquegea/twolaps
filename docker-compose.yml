@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:14
+    container_name: ia_report_postgres
+    environment:
+      POSTGRES_DB: ia_reports_db
+      POSTGRES_USER: report_user
+      POSTGRES_PASSWORD: strong_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build: .
+    container_name: ia_report_backend
+    depends_on:
+      - postgres
+    ports:
+      - "5050:5050"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://report_user:strong_password@postgres:5432/ia_reports_db
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERPAPI_KEY=${SERPAPI_KEY}
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:
