@@ -235,3 +235,51 @@ def get_deep_dive_analysis_prompt(category_name: str, kpis: dict, client_name: s
 
     **FORMATO:** Redacta un párrafo de análisis denso, profesional y directo. No listes los datos, intégralos en tu narrativa.
     """
+
+
+def get_correlation_interpretation_prompt(aggregated_data: dict, correlation_data: dict) -> str:
+    """
+    Solicita a la IA de alto nivel que interprete correlaciones transversales entre categorías y KPIs.
+    """
+    data_json = json.dumps(correlation_data, indent=2, ensure_ascii=False)
+    client_name = aggregated_data.get('client_name', 'Nuestra marca')
+    return f"""
+    **ROL:** Eres un Analista Principal de Insights con enfoque causal.
+    **TAREA:** Interpreta las correlaciones transversales entre categorías y KPIs y extrae 3-5 insights potentes y accionables para {client_name}.
+
+    **DATOS DE CORRELACIÓN (base):**
+    ```json
+    {data_json}
+    ```
+
+    **INSTRUCCIONES:**
+    - Prioriza relaciones con mayor "strength" y soporte cuantitativo.
+    - Formula hipótesis plausibles y cómo validarlas (dato/experimento).
+    - Concreta implicaciones y una recomendación por insight.
+    - Responde en 2-3 párrafos, profesional y claro.
+    """
+
+
+def get_trends_anomalies_prompt(aggregated_data: dict) -> str:
+    """
+    Pide a la IA analizar tendencias y anomalías entre periodo actual y anterior.
+    """
+    trends = aggregated_data.get('trends', {})
+    prev = aggregated_data.get('previous_period', {})
+    trends_json = json.dumps(trends, indent=2, ensure_ascii=False)
+    return f"""
+    **ROL:** Eres un Analista de Tendencias.
+    **TAREA:** Redacta la sección "Tendencias y Señales Emergentes" del informe, explicando cambios significativos entre periodos.
+
+    **PERIODO ANTERIOR:** {prev.get('start_date', 'N/D')} a {prev.get('end_date', 'N/D')}
+    **CAMBIOS (trends JSON):**
+    ```json
+    {trends_json}
+    ```
+
+    **INSTRUCCIONES:**
+    - Explica las variaciones de sentimiento (total y por categoría) y SOV por categoría.
+    - Destaca competidores que ganaron/perdieron share y por qué podría estar pasando.
+    - Enumera 3-5 tópicos emergentes y valora si son moda o tendencia (con criterios).
+    - Cierra con 3 recomendaciones tácticas inmediatas y 2 estratégicas.
+    """

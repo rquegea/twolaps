@@ -8,7 +8,10 @@ from src.reports.prompts import (
     get_executive_summary_prompt,
     get_competitive_analysis_prompt,
     get_deep_dive_analysis_prompt,
+    get_correlation_interpretation_prompt,
+    get_trends_anomalies_prompt,
 )
+from src.reports.correlation_engine import compute_cross_category_correlations
 
 def generate_report_content(aggregated_data: dict) -> dict:
     """
@@ -61,7 +64,7 @@ def generate_report_content(aggregated_data: dict) -> dict:
     # -------------------------
     # Fase 2: Contenido Estratégico
     # -------------------------
-    report_content = {"strategic": {}, "detailed": {}}
+    report_content = {"strategic": {}, "detailed": {}, "cross": {}}
     # Resumen Ejecutivo (basado en KPIs enriquecidos)
     try:
         exec_prompt = get_executive_summary_prompt(aggregated_data)
@@ -98,6 +101,19 @@ def generate_report_content(aggregated_data: dict) -> dict:
         report_content["strategic"]["Análisis Competitivo"] = ""
 
     # -------------------------
+    # Fase 2.5: Correlaciones Transversales
+    # -------------------------
+    try:
+        correlation_data = compute_cross_category_correlations(aggregated_data)
+        corr_prompt = get_correlation_interpretation_prompt(aggregated_data, correlation_data)
+        corr_text, _ = fetch_openai_response(corr_prompt, model="gpt-4o")
+        report_content["cross"]["Correlaciones Transversales"] = corr_text
+        report_content["cross"]["_raw_correlations"] = correlation_data
+    except Exception as e:
+        print(f"Error generando Correlaciones Transversales: {e}")
+        report_content["cross"]["Correlaciones Transversales"] = ""
+
+    # -------------------------
     # Fase 3: Contenido Detallado (Anexo)
     # -------------------------
     for category_name, data in mentions_by_category.items():
@@ -108,6 +124,17 @@ def generate_report_content(aggregated_data: dict) -> dict:
         prompt = get_deep_dive_analysis_prompt(category_name, kpis, aggregated_data.get("client_name", "Nuestra marca"))
         analysis_text, _ = fetch_openai_response(prompt, model="gpt-4o")
         report_content["detailed"][category_name] = analysis_text
+
+    # -------------------------
+    # Fase 4: Tendencias y Anomalías
+    # -------------------------
+    try:
+        trends_prompt = get_trends_anomalies_prompt(aggregated_data)
+        trends_text, _ = fetch_openai_response(trends_prompt, model="gpt-4o")
+        report_content["strategic"]["Tendencias y Señales Emergentes"] = trends_text
+    except Exception as e:
+        print(f"Error generando Tendencias y Señales Emergentes: {e}")
+        report_content["strategic"]["Tendencias y Señales Emergentes"] = ""
 
     print("✅ Contenido del informe híbrido generado.")
     return report_content

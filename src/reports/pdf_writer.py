@@ -249,6 +249,20 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
         paragraph.drawOn(p, inch, y_position - h)
         y_position -= (h + 30)
 
+    # Sección: Tendencias y Señales Emergentes
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(inch, y_position, "Tendencias y Señales Emergentes")
+    y_position -= 20
+    trends_text = strategic_content.get("Tendencias y Señales Emergentes", "")
+    if trends_text:
+        paragraph = Paragraph(trends_text.replace('\n', BR), styles['Justify'])
+        _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
+        if y_position - h < inch:
+            p.showPage()
+            y_position = height - inch
+        paragraph.drawOn(p, inch, y_position - h)
+        y_position -= (h + 30)
+
     # Plan de Acción Estratégico
     p.setFont("Helvetica-Bold", 14)
     p.drawString(inch, y_position, "Plan de Acción Estratégico")
@@ -270,6 +284,21 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
 
     if plan_text:
         paragraph = Paragraph(plan_text.replace('\n', BR), styles['Justify'])
+        _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
+        if y_position - h < inch:
+            p.showPage()
+            y_position = height - inch
+        paragraph.drawOn(p, inch, y_position - h)
+        y_position -= (h + 30)
+
+    # Sección: Correlaciones Transversales (parte estratégica)
+    cross_content = report_content.get("cross", {})
+    corr_text = cross_content.get("Correlaciones Transversales", "")
+    if corr_text:
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(inch, y_position, "Correlaciones Transversales entre Categorías")
+        y_position -= 20
+        paragraph = Paragraph(corr_text.replace('\n', BR), styles['Justify'])
         _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
         if y_position - h < inch:
             p.showPage()
@@ -342,7 +371,7 @@ def draw_category_kpi_table(p, y_position, width, category_name, kpis):
         ('TOPPADDING', (0,0), (-1,-1), 4),
     ]))
 
-    w, h = table.wrapOn(p, width - 2 * inch, y_position)
+    _, h = table.wrapOn(p, width - 2 * inch, y_position)
     if y_position - h < inch:
         p.showPage()
         width, height = letter

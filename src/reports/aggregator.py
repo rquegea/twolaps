@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime, timedelta
 import psycopg2
 import psycopg2.extras
 from collections import defaultdict, Counter
@@ -44,6 +45,28 @@ def detectar_marcas(texto: str, marcas: list) -> list:
         if pattern.search(texto or ""):
             found.add(original)
     return list(found)
+
+
+def _parse_date(date_str: str) -> datetime:
+    return datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def _format_date(date_obj: datetime) -> str:
+    return date_obj.strftime("%Y-%m-%d")
+
+
+def _compute_previous_period(start_date: str, end_date: str) -> tuple[str, str]:
+    """
+    Calcula el periodo anterior de igual duración inmediatamente anterior al periodo actual.
+    Ambos parámetros y valores devueltos en formato YYYY-MM-DD.
+    """
+    start_dt = _parse_date(start_date)
+    end_dt = _parse_date(end_date)
+    # Duración inclusiva en días (suponemos que la query usa < end+1day)
+    duration_days = (end_dt - start_dt).days + 1
+    prev_end = start_dt - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=duration_days - 1)
+    return _format_date(prev_start), _format_date(prev_end)
 
 
 def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, end_date: str) -> dict:
@@ -112,29 +135,41 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
         aggregated_data["client_name"] = client_name
         aggregated_data["market_competitors"] = market_competitors
 
-        # Query de menciones con categoría (incluye key_topics)
-        cur.execute("""
-            SELECT
-                pc.name as category_name,
-                m.summary,
-                m.sentiment,
-                m.key_topics
-            FROM mentions m
-            JOIN queries q ON m.query_id = q.id
-            JOIN prompt_categories pc ON q.category_id = pc.id
-            WHERE m.client_id = %s
-              AND q.market_id = %s
-              AND m.created_at >= %s::date
-              AND m.created_at < (%s::date + INTERVAL '1 day');
-        """, (client_id, market_id, start_date, end_date))
-        
-        rows = cur.fetchall()
-        
+        # Helper para ejecutar la query de menciones por periodo
+        def fetch_mentions_for_period(start: str, end: str):
+            cur.execute(
+                """
+                SELECT
+                    pc.name as category_name,
+                    m.summary,
+                    m.sentiment,
+                    m.key_topics
+                FROM mentions m
+                JOIN queries q ON m.query_id = q.id
+                JOIN prompt_categories pc ON q.category_id = pc.id
+                WHERE m.client_id = %s
+                  AND q.market_id = %s
+                  AND m.created_at >= %s::date
+                  AND m.created_at < (%s::date + INTERVAL '1 day');
+                """,
+                (client_id, market_id, start, end),
+            )
+            return cur.fetchall()
+
+        # Query de menciones con categoría (incluye key_topics) periodo actual
+        rows = fetch_mentions_for_period(start_date, end_date)
+
         aggregated_data["kpis"]["total_mentions"] = len(rows)
         if not rows:
+            # Aun así calcular periodo anterior para exponer metadatos
+            prev_start, prev_end = _compute_previous_period(start_date, end_date)
+            aggregated_data["previous_period"] = {"start_date": prev_start, "end_date": prev_end}
             return aggregated_data
 
         total_sentiment = 0.0
+        # Acumuladores globales para temas/entidades
+        global_topics_counter = Counter()
+        topic_counts_by_category: dict[str, Counter] = defaultdict(Counter)
         for row in rows:
             category = row['category_name']
             # Normalizar a float para evitar mezclar Decimal con float más adelante
@@ -164,15 +199,23 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
                 try:
                     # psycopg2 convierte JSONB a list/dict automáticamente; normalizar a lista de strings
                     if isinstance(key_topics, list):
-                        kpi_cat['key_topics'].update([str(t) for t in key_topics])
+                        normalized = [str(t) for t in key_topics]
+                        kpi_cat['key_topics'].update(normalized)
+                        global_topics_counter.update(normalized)
+                        topic_counts_by_category[category].update(normalized)
                     elif isinstance(key_topics, dict):
                         # Si viniera como {topic: count}, sumar counts
-                        kpi_cat['key_topics'].update({str(k): int(v) for k, v in key_topics.items()})
+                        norm_dict = {str(k): int(v) for k, v in key_topics.items()}
+                        kpi_cat['key_topics'].update(norm_dict)
+                        global_topics_counter.update(norm_dict)
+                        topic_counts_by_category[category].update(norm_dict)
                     else:
                         # cadena con separado por comas (fallback)
                         parts = [s.strip() for s in str(key_topics).split(',') if s.strip()]
                         if parts:
                             kpi_cat['key_topics'].update(parts)
+                            global_topics_counter.update(parts)
+                            topic_counts_by_category[category].update(parts)
                 except Exception:
                     pass
             aggregated_data["kpis"]["mentions_by_category_count"][category] += 1
@@ -215,6 +258,115 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
             aggregated_data["kpis"]["share_of_voice"] = (float(total_client_mentions) / total_mentions_with_brands) * 100.0
         else:
             aggregated_data["kpis"]["share_of_voice"] = 0.0
+
+        # Temas/entidades globales
+        aggregated_data["global_key_topics"] = dict(global_topics_counter.most_common(15))
+        aggregated_data["topic_counts_by_category"] = {
+            cat: dict(cnt.most_common(20)) for cat, cnt in topic_counts_by_category.items()
+        }
+
+        # -------------- Tendencias (comparación periodo anterior) --------------
+        prev_start, prev_end = _compute_previous_period(start_date, end_date)
+        aggregated_data["previous_period"] = {"start_date": prev_start, "end_date": prev_end}
+        prev_rows = fetch_mentions_for_period(prev_start, prev_end)
+
+        prev_total_sentiment = 0.0
+        prev_sentiment_by_category = defaultdict(lambda: {"sum": 0.0, "count": 0})
+        prev_global_topics_counter = Counter()
+        prev_topic_counts_by_category: dict[str, Counter] = defaultdict(Counter)
+        prev_sov_by_category = defaultdict(lambda: {"client": 0, "total": 0, "competitors": defaultdict(int)})
+        prev_competitor_mentions = defaultdict(int)
+        for row in prev_rows:
+            category = row['category_name']
+            sentiment = float(row['sentiment']) if row['sentiment'] is not None else 0.0
+            prev_total_sentiment += sentiment
+            prev_sentiment_by_category[category]["sum"] += sentiment
+            prev_sentiment_by_category[category]["count"] += 1
+            key_topics = row.get('key_topics') if isinstance(row, dict) else row['key_topics']
+            if key_topics:
+                try:
+                    if isinstance(key_topics, list):
+                        normalized = [str(t) for t in key_topics]
+                        prev_global_topics_counter.update(normalized)
+                        prev_topic_counts_by_category[category].update(normalized)
+                    elif isinstance(key_topics, dict):
+                        norm_dict = {str(k): int(v) for k, v in key_topics.items()}
+                        prev_global_topics_counter.update(norm_dict)
+                        prev_topic_counts_by_category[category].update(norm_dict)
+                    else:
+                        parts = [s.strip() for s in str(key_topics).split(',') if s.strip()]
+                        if parts:
+                            prev_global_topics_counter.update(parts)
+                            prev_topic_counts_by_category[category].update(parts)
+                except Exception:
+                    pass
+            # Marcas para SOV previo
+            detected_prev = detectar_marcas(row['summary'], [client_name] + market_competitors)
+            if detected_prev:
+                for brand in detected_prev:
+                    if brand == client_name:
+                        prev_sov_by_category[category]["client"] += 1
+                    else:
+                        prev_competitor_mentions[brand] += 1
+                        prev_sov_by_category[category]["competitors"][brand] += 1
+                    prev_sov_by_category[category]["total"] += 1
+
+        # KPIs previos simples
+        prev_total_mentions = float(len(prev_rows))
+        prev_avg_sentiment = (prev_total_sentiment / prev_total_mentions) if prev_total_mentions > 0 else 0.0
+        prev_avg_by_cat = {
+            cat: (vals["sum"] / vals["count"]) if vals["count"] > 0 else 0.0
+            for cat, vals in prev_sentiment_by_category.items()
+        }
+
+        # Deltas de sentimiento
+        trends = {
+            "sentiment_delta_total": aggregated_data["kpis"]["average_sentiment"] - prev_avg_sentiment,
+            "sentiment_delta_by_category": {},
+            "sov_delta_by_category": {},
+            "competitor_mentions_delta": {},
+            "emerging_topics": [],  # tópicos con crecimiento fuerte
+        }
+
+        for category, current_vals in aggregated_data["kpis"]["sentiment_by_category"].items():
+            prev_avg = float(prev_avg_by_cat.get(category, 0.0))
+            trends["sentiment_delta_by_category"][category] = current_vals.get("average", 0.0) - prev_avg
+
+        # Deltas de SOV por categoría (cliente/total %)
+        def compute_pct(entry: dict) -> float:
+            total_local = float(entry.get("total", 0))
+            client_local = float(entry.get("client", 0))
+            return (client_local / total_local * 100.0) if total_local > 0 else 0.0
+
+        for category, entry in aggregated_data["kpis"].get("sov_by_category", {}).items():
+            current_pct = compute_pct(entry)
+            prev_pct = compute_pct(prev_sov_by_category.get(category, {}))
+            trends["sov_delta_by_category"][category] = current_pct - prev_pct
+
+        # Deltas de menciones por competidor
+        for brand, count in aggregated_data["kpis"].get("competitor_mentions", {}).items():
+            prev_count = int(prev_competitor_mentions.get(brand, 0))
+            trends["competitor_mentions_delta"][brand] = int(count) - prev_count
+
+        # Tópicos emergentes: crecimiento absoluto >= 5 o ratio >= 200%
+        current_topics = global_topics_counter
+        prev_topics = prev_global_topics_counter
+        emerging = []
+        for topic, cur_count in current_topics.items():
+            prev_count = int(prev_topics.get(topic, 0))
+            if cur_count >= 3 and (prev_count == 0 or cur_count - prev_count >= 5 or (prev_count > 0 and (cur_count / prev_count) >= 2.0)):
+                emerging.append({
+                    "topic": topic,
+                    "current": int(cur_count),
+                    "previous": int(prev_count),
+                    "delta": int(cur_count - prev_count),
+                    "growth_ratio": (float(cur_count) / float(prev_count)) if prev_count > 0 else None,
+                })
+        # Ordenar por delta desc
+        emerging.sort(key=lambda x: (x["delta"], x["current"]), reverse=True)
+        trends["emerging_topics"] = emerging[:10]
+
+        aggregated_data["trends"] = trends
 
         print(f"Datos agregados: {len(rows)} menciones, sentimiento promedio: {aggregated_data['kpis']['average_sentiment']:.2f}")
 
