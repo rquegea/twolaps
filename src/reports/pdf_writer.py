@@ -4,21 +4,65 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import Paragraph
 from reportlab.lib.units import inch
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.charts.axes import XCategoryAxis, YValueAxis
+from reportlab.lib import colors
+
+def draw_sentiment_chart(data: dict):
+    """Crea un gráfico de barras de sentimiento por categoría."""
+    drawing = Drawing(width=500, height=250)
+    
+    chart_data = []
+    labels = []
+    
+    sentiment_by_category = data.get('sentiment_by_category', {})
+    if not sentiment_by_category:
+        return None
+
+    # Ordenar categorías por sentimiento para un mejor visual
+    sorted_categories = sorted(sentiment_by_category.items(), key=lambda item: item[1]['average'], reverse=True)
+
+    for category, values in sorted_categories:
+        chart_data.append(values['average'])
+        labels.append(category.replace("Análisis de ", "").replace(" y ", " y\n")) # Acortar etiquetas
+
+    bar_chart = VerticalBarChart()
+    bar_chart.x = 50
+    bar_chart.y = 50
+    bar_chart.height = 180
+    bar_chart.width = 400
+    bar_chart.data = [tuple(chart_data)]
+    
+    # Colores de las barras (verde si positivo, rojo si negativo)
+    for i, val in enumerate(chart_data):
+        bar_chart.bars[i].fillColor = colors.green if val >= 0 else colors.red
+
+    # Ejes
+    bar_chart.categoryAxis = XCategoryAxis()
+    bar_chart.categoryAxis.categoryNames = labels
+    bar_chart.categoryAxis.labels.boxAnchor = 'n'
+    bar_chart.categoryAxis.labels.angle = 30
+    
+    bar_chart.valueAxis = YValueAxis()
+    bar_chart.valueAxis.valueMin = -1
+    bar_chart.valueAxis.valueMax = 1
+    bar_chart.valueAxis.valueStep = 0.5
+    bar_chart.valueAxis.labels.fontName = 'Helvetica'
+
+    drawing.add(bar_chart)
+    return drawing
 
 def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
-    """
-    Crea un informe en PDF a partir del contenido generado.
-    """
+    """Crea un informe en PDF con KPIs y gráficos."""
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name='Justify', alignment=4)) # Justificado
-
+    styles.add(ParagraphStyle(name='Justify', alignment=4, fontName='Helvetica', fontSize=10, leading=14))
+    
     y_position = height - inch
-    page_num = 1
 
-    # Título
     p.setFont("Helvetica-Bold", 18)
     p.drawString(inch, y_position, "Informe de Inteligencia de Mercado")
     y_position -= 30
@@ -27,35 +71,47 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
     p.drawString(inch, y_position, f"Periodo: {metadata.get('start_date')} a {metadata.get('end_date')}")
     y_position -= 40
     
-    # Contenido
+    # --- NUEVA SECCIÓN: KPIs Y GRÁFICO ---
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(inch, y_position, "Resumen Ejecutivo de Sentimiento")
+    y_position -= 30
+    
+    kpis = metadata.get('kpis', {})
+    p.setFont("Helvetica", 10)
+    p.drawString(inch, y_position, f"Menciones totales analizadas: {kpis.get('total_mentions', 0)}")
+    y_position -= 15
+    p.drawString(inch, y_position, f"Sentimiento General Promedio: {kpis.get('average_sentiment', 0.0):.2f}")
+    y_position -= 20
+    
+    # Dibujar el gráfico
+    chart = draw_sentiment_chart(kpis)
+    if chart:
+        chart.drawOn(p, inch, y_position - 250)
+        y_position -= 280
+
+    # Salto de página para empezar las secciones de texto
+    p.showPage()
+    y_position = height - inch
+    
+    # --- Secciones de Análisis de Texto ---
     for category_name, text in report_content.items():
-        if y_position < 2 * inch: # Salto de página si no hay espacio
-            # footer y salto de página
-            p.setFont("Helvetica", 9)
-            p.drawRightString(8*inch, 0.5*inch, f"Página {page_num}")
+        # ... (el resto del código para escribir los párrafos es el mismo)
+        paragraph_temp = Paragraph(text.replace('\n', '<br/>'), styles['Justify'])
+        w_temp, h_temp = paragraph_temp.wrapOn(p, width - 2 * inch, y_position)
+        
+        if y_position - h_temp < inch:
             p.showPage()
-            page_num += 1
             y_position = height - inch
 
         p.setFont("Helvetica-Bold", 14)
         p.drawString(inch, y_position, category_name)
-        y_position -= 20
+        y_position -= 25
         
         paragraph = Paragraph(text.replace('\n', '<br/>'), styles['Justify'])
-        w, h = paragraph.wrapOn(p, width - 2 * inch, height)
-        if h > (y_position - inch):
-            # no cabe en esta página, salta con footer
-            p.setFont("Helvetica", 9)
-            p.drawRightString(8*inch, 0.5*inch, f"Página {page_num}")
-            p.showPage()
-            page_num += 1
-            y_position = height - inch
+        w, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
         paragraph.drawOn(p, inch, y_position - h)
-        y_position -= (h + 30)
+        y_position -= (h + 40)
 
-    # Footer final
-    p.setFont("Helvetica", 9)
-    p.drawRightString(8*inch, 0.5*inch, f"Página {page_num}")
     p.save()
     buffer.seek(0)
     return buffer

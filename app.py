@@ -1,4 +1,5 @@
 import os
+import traceback
 from flask import Flask, jsonify, request, send_file
 from dotenv import load_dotenv
 from src.reports.aggregator import aggregate_data_for_report
@@ -42,8 +43,10 @@ def generate_report_endpoint():
         )
 
     except Exception as e:
+        # Log detallado del stacktrace para diagnosticar el 500
+        traceback.print_exc()
         print(f"Error generando el informe: {e}")
-        return jsonify({"error": "No se pudo generar el informe"}), 500
+        return jsonify({"error": "No se pudo generar el informe", "details": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050, debug=True)

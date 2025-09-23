@@ -47,9 +47,6 @@ PROMPTS_TO_INSERT = [
 
 def get_db_connection():
     """Establece la conexión con la base de datos."""
-    database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        return psycopg2.connect(database_url)
     return psycopg2.connect(
         host=os.getenv("DB_HOST", "postgres"),
         port=os.getenv("DB_PORT", 5432),

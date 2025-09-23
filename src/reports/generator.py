@@ -1,10 +1,5 @@
-import os
-from ..engines.openai_engine import fetch_openai_response
-from .prompts import get_analysis_prompt
-from .aggregator import aggregate_data_for_report
-
-MODEL = os.getenv("REPORT_MODEL", "gpt-4o")
-TEMPERATURE = float(os.getenv("REPORT_TEMPERATURE", "0.3"))
+from src.engines.openai_engine import fetch_openai_response
+from src.reports.prompts import get_analysis_prompt
 
 def generate_report_content(aggregated_data: dict) -> dict:
     """
@@ -13,18 +8,18 @@ def generate_report_content(aggregated_data: dict) -> dict:
     report_content = {}
     mentions_by_category = aggregated_data.get("mentions_by_category", {})
     all_summaries = aggregated_data.get("all_summaries", [])
+    kpis = aggregated_data.get("kpis", {}) # <-- AÑADIR ESTA LÍNEA
     
     print("Generando contenido del informe con IA avanzada...")
     
-    if not mentions_by_category:
-        return {"Resumen ejecutivo": "No se registraron menciones en el periodo seleccionado."}
-
     for category_name, data in mentions_by_category.items():
-        print(f"  - Analizando categoría: {category_name}")
-        prompt = get_analysis_prompt(category_name, data, all_summaries)
+        if not data: continue
         
-        # Usamos el modelo configurable para el análisis final
-        analysis_text, _ = fetch_openai_response(prompt, model=MODEL)
+        print(f"  - Analizando categoría: {category_name}")
+        # Pasar los KPIs al prompt
+        prompt = get_analysis_prompt(category_name, data, all_summaries, kpis) # <-- MODIFICAR ESTA LÍNEA
+        
+        analysis_text, _ = fetch_openai_response(prompt, model="gpt-4o")
         
         report_content[category_name] = analysis_text
     
