@@ -8,11 +8,8 @@ def fetch_perplexity_response(prompt: str, model: str | None = None) -> Tuple[st
     Realiza una llamada a la API de Perplexity y devuelve la respuesta y metadatos.
     """
     if model is None:
-        env_model = os.getenv("PERPLEXITY_MODEL")
-        if not env_model:
-            return "", {"error": "PERPLEXITY_MODEL no configurado"}
-        model = env_model
-    url = "https://api.perplexity.ai/v1/chat/completions"
+        model = os.getenv("PERPLEXITY_MODEL", "sonar")
+    url = "https://api.perplexity.ai/chat/completions"
     
     payload = {
         "model": model,

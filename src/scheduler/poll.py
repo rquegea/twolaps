@@ -66,14 +66,12 @@ def run_poll():
                 only_engine = os.getenv("ONLY_ENGINE", "").lower()
                 engines = {}
                 if only_engine == "perplexity":
-                    if os.getenv("PERPLEXITY_API_KEY") and os.getenv("PERPLEXITY_MODEL"):
-                        engines["Perplexity"] = fetch_perplexity_response
+                    engines["Perplexity (sonar)"] = fetch_perplexity_response
                 elif only_engine == "openai":
                     engines["OpenAI (gpt-4o-mini)"] = fetch_openai_response
                 else:
                     engines["OpenAI (gpt-4o-mini)"] = fetch_openai_response
-                    if os.getenv("PERPLEXITY_API_KEY") and os.getenv("PERPLEXITY_MODEL"):
-                        engines["Perplexity"] = fetch_perplexity_response
+                    engines["Perplexity (sonar)"] = fetch_perplexity_response
                 
                 for engine_name, fetch_function in engines.items():
                     start_time = time.time()
