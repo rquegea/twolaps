@@ -3,18 +3,24 @@ import requests
 import json
 from typing import Tuple, Dict, Any
 
-def fetch_perplexity_response(prompt: str, model: str = "llama-3-sonar-small-32k-online") -> Tuple[str, Dict[str, Any]]:
+def fetch_perplexity_response(prompt: str, model: str | None = None) -> Tuple[str, Dict[str, Any]]:
     """
     Realiza una llamada a la API de Perplexity y devuelve la respuesta y metadatos.
     """
-    url = "https://api.perplexity.ai/chat/completions"
+    if model is None:
+        env_model = os.getenv("PERPLEXITY_MODEL")
+        if not env_model:
+            return "", {"error": "PERPLEXITY_MODEL no configurado"}
+        model = env_model
+    url = "https://api.perplexity.ai/v1/chat/completions"
     
     payload = {
         "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant providing comprehensive and neutral information."},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        "max_tokens": 64
     }
     
     headers = {

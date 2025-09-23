@@ -48,19 +48,32 @@ def run_poll():
         for client_id, client_name in clients:
             print(f"\n--- Procesando cliente: {client_name} (ID: {client_id}) ---")
             
-            # 2. Obtener queries para el cliente actual
+            # 2. Obtener queries para el cliente actual (con límite opcional)
             cur.execute("SELECT q.id, q.query FROM queries q JOIN markets m ON q.market_id = m.id WHERE m.client_id = %s AND q.enabled = TRUE;", (client_id,))
             queries = cur.fetchall()
+            try:
+                query_limit = int(os.getenv("QUERY_LIMIT", "0"))
+            except ValueError:
+                query_limit = 0
+            if query_limit > 0:
+                queries = queries[:query_limit]
             print(f"Encontradas {len(queries)} queries activas para este cliente.")
             
             for query_id, query_text in queries:
                 print(f"  -> Ejecutando query: '{query_text[:50]}...' (ID: {query_id})")
                 
                 # 3. Definir los motores a ejecutar
-                engines = {
-                    "OpenAI (gpt-4o-mini)": fetch_openai_response,
-                    "Perplexity (llama-3-sonar-small-32k-online)": fetch_perplexity_response,
-                }
+                only_engine = os.getenv("ONLY_ENGINE", "").lower()
+                engines = {}
+                if only_engine == "perplexity":
+                    if os.getenv("PERPLEXITY_API_KEY") and os.getenv("PERPLEXITY_MODEL"):
+                        engines["Perplexity"] = fetch_perplexity_response
+                elif only_engine == "openai":
+                    engines["OpenAI (gpt-4o-mini)"] = fetch_openai_response
+                else:
+                    engines["OpenAI (gpt-4o-mini)"] = fetch_openai_response
+                    if os.getenv("PERPLEXITY_API_KEY") and os.getenv("PERPLEXITY_MODEL"):
+                        engines["Perplexity"] = fetch_perplexity_response
                 
                 for engine_name, fetch_function in engines.items():
                     start_time = time.time()
