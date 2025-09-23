@@ -25,6 +25,7 @@ services:
       - DATABASE_URL=postgresql://report_user:strong_password@postgres:5432/ia_reports_db
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SERPAPI_KEY=${SERPAPI_KEY}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
     env_file:
       - .env
 

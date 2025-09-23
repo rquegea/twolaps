@@ -7,6 +7,9 @@ load_dotenv()
 
 def get_db_connection():
     """Establece la conexión con la base de datos usando variables de entorno."""
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return psycopg2.connect(database_url)
     return psycopg2.connect(
         host=os.getenv("DB_HOST", "postgres"), # 'postgres' es el nombre del servicio en docker-compose
         port=os.getenv("DB_PORT", 5432),

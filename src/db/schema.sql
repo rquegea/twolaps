@@ -1,5 +1,5 @@
 -- Tabla para gestionar Clientes del servicio
-CREATE TABLE clients (
+CREATE TABLE IF NOT EXISTS clients (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     api_keys JSONB,
@@ -7,7 +7,7 @@ CREATE TABLE clients (
 );
 
 -- Tabla para gestionar los Mercados (ej. España, México, LATAM)
-CREATE TABLE markets (
+CREATE TABLE IF NOT EXISTS markets (
     id SERIAL PRIMARY KEY,
     client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -17,14 +17,14 @@ CREATE TABLE markets (
 );
 
 -- NUEVO: Tabla para las Categorías Estratégicas de Análisis
-CREATE TABLE prompt_categories (
+CREATE TABLE IF NOT EXISTS prompt_categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT
 );
 
 -- Tabla de Queries (Prompts), ahora vinculada a una categoría estratégica
-CREATE TABLE queries (
+CREATE TABLE IF NOT EXISTS queries (
     id SERIAL PRIMARY KEY,
     market_id INTEGER NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
     category_id INTEGER NOT NULL REFERENCES prompt_categories(id) ON DELETE CASCADE,
@@ -38,7 +38,7 @@ CREATE TABLE queries (
 );
 
 -- Tabla de Menciones (Resultados de IA), sin cambios
-CREATE TABLE mentions (
+CREATE TABLE IF NOT EXISTS mentions (
     id SERIAL PRIMARY KEY,
     query_id INTEGER NOT NULL REFERENCES queries(id) ON DELETE CASCADE,
     client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
@@ -60,7 +60,7 @@ CREATE TABLE mentions (
 );
 
 -- Tabla de Insights (Análisis de la IA avanzada), sin cambios
-CREATE TABLE insights (
+CREATE TABLE IF NOT EXISTS insights (
     id SERIAL PRIMARY KEY,
     client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     payload JSONB,
@@ -68,7 +68,7 @@ CREATE TABLE insights (
 );
 
 -- Tabla para registrar la generación de informes, sin cambios
-CREATE TABLE report_generation_log (
+CREATE TABLE IF NOT EXISTS report_generation_log (
     id SERIAL PRIMARY KEY,
     client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
     market_id INTEGER NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
@@ -82,8 +82,8 @@ CREATE TABLE report_generation_log (
 );
 
 -- Índices para mejorar el rendimiento
-CREATE INDEX idx_queries_market_id ON queries(market_id);
-CREATE INDEX idx_queries_category_id ON queries(category_id);
-CREATE INDEX idx_mentions_query_id ON mentions(query_id);
-CREATE INDEX idx_mentions_client_id ON mentions(client_id);
-CREATE INDEX idx_mentions_created_at ON mentions(created_at);
+CREATE INDEX IF NOT EXISTS idx_queries_market_id ON queries(market_id);
+CREATE INDEX IF NOT EXISTS idx_queries_category_id ON queries(category_id);
+CREATE INDEX IF NOT EXISTS idx_mentions_query_id ON mentions(query_id);
+CREATE INDEX IF NOT EXISTS idx_mentions_client_id ON mentions(client_id);
+CREATE INDEX IF NOT EXISTS idx_mentions_created_at ON mentions(created_at);
