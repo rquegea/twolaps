@@ -298,7 +298,11 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
         p.setFont("Helvetica-Bold", 14)
         p.drawString(inch, y_position, category_name)
         y_position -= 25
-        
+
+        # --- NUEVA TABLA DE KPIs POR CATEGORÍA ---
+        y_position = draw_category_kpi_table(p, y_position, width, category_name, metadata.get('kpis', {}))
+        # --- FIN TABLA ---
+
         paragraph = Paragraph(text.replace('\n', BR), styles['Justify'])
         _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
         paragraph.drawOn(p, inch, y_position - h)
@@ -307,3 +311,41 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
     p.save()
     buffer.seek(0)
     return buffer
+
+
+def draw_category_kpi_table(p, y_position, width, category_name, kpis):
+    """Dibuja una tabla de KPIs para una categoría específica."""
+    cat_kpis = kpis.get('sentiment_by_category', {}).get(category_name, {})
+    if not cat_kpis:
+        return y_position
+
+    sentiment_avg = f"{cat_kpis.get('average', 0.0):.2f}"
+    dist = cat_kpis.get('distribution', {})
+    dist_str = f"Pos: {dist.get('positive', 0)}, Neu: {dist.get('neutral', 0)}, Neg: {dist.get('negative', 0)}"
+    key_topics = cat_kpis.get('key_topics', {}) or {}
+    top_topic = next(iter(key_topics), "N/A")
+
+    table_data = [
+        ["Métrica", "Valor"],
+        ["Sentimiento Promedio", sentiment_avg],
+        ["Distribución (P/N/N)", dist_str],
+        ["Tema Principal", top_topic],
+    ]
+
+    table = Table(table_data, colWidths=[1.5 * inch, 2.5 * inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    w, h = table.wrapOn(p, width - 2 * inch, y_position)
+    if y_position - h < inch:
+        p.showPage()
+        width, height = letter
+        y_position = height - inch
+    table.drawOn(p, inch, y_position - h)
+    return y_position - h - 15

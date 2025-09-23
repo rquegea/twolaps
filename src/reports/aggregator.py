@@ -2,7 +2,7 @@ import os
 import re
 import psycopg2
 import psycopg2.extras
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 def get_db_connection():
     """Establece la conexión con la base de datos.
@@ -66,7 +66,15 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
         "kpis": {
             "total_mentions": 0,
             "average_sentiment": 0.0,
-            "sentiment_by_category": defaultdict(lambda: {'sum': 0, 'count': 0}),
+            "sentiment_by_category": defaultdict(lambda: {
+                'sum': 0,
+                'count': 0,
+                'average': 0.0,
+                # Distribución por categoría (conteos)
+                'distribution': {'positive': 0, 'neutral': 0, 'negative': 0},
+                # Temas más frecuentes por categoría
+                'key_topics': Counter(),
+            }),
             # Métricas de visibilidad (legado)
             "mentions_by_category_count": defaultdict(int),
             "share_of_voice_by_category": {},
@@ -74,7 +82,8 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
             # NUEVOS KPIs basados en marcas
             "share_of_voice": 0.0,
             "competitor_mentions": defaultdict(int),
-            "sov_by_category": defaultdict(lambda: {"client": 0, "total": 0}),
+            # Desglose granular por categoría: menciones cliente/competidores/total con marcas
+            "sov_by_category": defaultdict(lambda: {"client": 0, "total": 0, "competitors": defaultdict(int)}),
         }
     }
 
@@ -103,12 +112,13 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
         aggregated_data["client_name"] = client_name
         aggregated_data["market_competitors"] = market_competitors
 
-        # Query de menciones con categoría
+        # Query de menciones con categoría (incluye key_topics)
         cur.execute("""
             SELECT
                 pc.name as category_name,
                 m.summary,
-                m.sentiment
+                m.sentiment,
+                m.key_topics
             FROM mentions m
             JOIN queries q ON m.query_id = q.id
             JOIN prompt_categories pc ON q.category_id = pc.id
@@ -141,6 +151,30 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
             kpi_cat = aggregated_data["kpis"]["sentiment_by_category"][category]
             kpi_cat['sum'] += sentiment
             kpi_cat['count'] += 1
+            # 1) Distribución de sentimiento
+            if sentiment > 0.2:
+                kpi_cat['distribution']['positive'] += 1
+            elif sentiment < -0.2:
+                kpi_cat['distribution']['negative'] += 1
+            else:
+                kpi_cat['distribution']['neutral'] += 1
+            # 2) Temas clave agregados
+            key_topics = row.get('key_topics') if isinstance(row, dict) else row['key_topics']
+            if key_topics:
+                try:
+                    # psycopg2 convierte JSONB a list/dict automáticamente; normalizar a lista de strings
+                    if isinstance(key_topics, list):
+                        kpi_cat['key_topics'].update([str(t) for t in key_topics])
+                    elif isinstance(key_topics, dict):
+                        # Si viniera como {topic: count}, sumar counts
+                        kpi_cat['key_topics'].update({str(k): int(v) for k, v in key_topics.items()})
+                    else:
+                        # cadena con separado por comas (fallback)
+                        parts = [s.strip() for s in str(key_topics).split(',') if s.strip()]
+                        if parts:
+                            kpi_cat['key_topics'].update(parts)
+                except Exception:
+                    pass
             aggregated_data["kpis"]["mentions_by_category_count"][category] += 1
 
             # --- Detección de marcas para SOV ---
@@ -151,6 +185,8 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
                         aggregated_data["kpis"]["sov_by_category"][category]["client"] += 1
                     else:
                         aggregated_data["kpis"]["competitor_mentions"][brand] += 1
+                        # Desglose de competidores por categoría
+                        aggregated_data["kpis"]["sov_by_category"][category]["competitors"][brand] += 1
                     aggregated_data["kpis"]["sov_by_category"][category]["total"] += 1
 
         # Finalizar cálculos
@@ -161,6 +197,9 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
         # Calcular la media de sentimiento por categoría
         for category, values in aggregated_data["kpis"]["sentiment_by_category"].items():
             values['average'] = float(values['sum']) / float(values['count']) if values['count'] > 0 else 0.0
+            # Convertir Counter a top-5 dict para serialización JSON
+            if isinstance(values.get('key_topics'), Counter):
+                values['key_topics'] = dict(values['key_topics'].most_common(5))
 
         # Métrica legada: % de visibilidad por categoría (del total de menciones)
         sov_legacy = {}

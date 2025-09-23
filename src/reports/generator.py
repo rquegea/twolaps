@@ -104,7 +104,8 @@ def generate_report_content(aggregated_data: dict) -> dict:
         if not data:
             continue
         print(f"  - Analizando categoría para anexo: {category_name}")
-        prompt = get_deep_dive_analysis_prompt(category_name, data, kpis, aggregated_data.get("client_name", "Nuestra marca"))
+        # Usar el nuevo prompt basado en KPIs enriquecidos
+        prompt = get_deep_dive_analysis_prompt(category_name, kpis, aggregated_data.get("client_name", "Nuestra marca"))
         analysis_text, _ = fetch_openai_response(prompt, model="gpt-4o")
         report_content["detailed"][category_name] = analysis_text
 

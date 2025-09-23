@@ -203,32 +203,35 @@ def get_competitive_analysis_prompt(aggregated_data: dict) -> str:
     """
 
 
-def get_deep_dive_analysis_prompt(category_name: str, category_data: list, kpis: dict, client_name: str) -> str:
-    """Prompt para Deep Dive por categoría: mercado, competencia y sentimiento, con SOV específico."""
-    data_json = json.dumps(category_data, indent=2, ensure_ascii=False, default=str)
-    sov_cat = kpis.get('sov_by_category', {}).get(category_name, {"client": 0, "total": 0})
-    client = float(sov_cat.get('client', 0))
-    total = float(sov_cat.get('total', 0))
-    sov_pct = (client / total * 100.0) if total > 0 else 0.0
-    avg_sent = kpis.get('average_sentiment', 0.0)
-    cat_sent = kpis.get('sentiment_by_category', {}).get(category_name, {})
-    cat_avg = float(cat_sent.get('average', 0.0))
+def get_deep_dive_analysis_prompt(category_name: str, kpis: dict, client_name: str) -> str:
+    """
+    NUEVO PROMPT MEJORADO para el análisis detallado por categoría.
+    Usa los KPIs enriquecidos para forzar un análisis de "minería de datos".
+    """
+    cat_kpis = kpis.get('sentiment_by_category', {}).get(category_name, {})
+
+    sentiment_avg = cat_kpis.get('average', 0.0)
+    distribution = cat_kpis.get('distribution', {})
+    key_topics = cat_kpis.get('key_topics', {})
+
+    dist_text = json.dumps(distribution, indent=2, ensure_ascii=False)
+    topics_text = json.dumps(key_topics, indent=2, ensure_ascii=False)
 
     return f"""
-    **ROL:** Eres un Analista Senior.
-    **TAREA:** Deep dive de la categoría "{category_name}".
+    **ROL:** Eres un Analista de Inteligencia de Mercado experto en el sector de {client_name}.
+    **TAREA:** Escribe el análisis para la sección "{category_name}" de un informe. Tu análisis debe ser una minería de datos, conectando los datos cuantitativos con conclusiones cualitativas y accionables.
 
-    **SOV de la categoría (cliente/total):** {sov_pct:.2f}% ({int(client)} menciones cliente / {int(total)} con marca)
-    **Sentimiento promedio (global vs. categoría):** global={avg_sent:.2f}, categoría={cat_avg:.2f}
+    **DATOS CUANTITATIVOS DE ESTA SECCIÓN:**
+    - Sentimiento Promedio de la Sección: {sentiment_avg:.2f} (comparado con el general de {kpis.get('average_sentiment', 0.0):.2f})
+    - Distribución del Sentimiento:
+    {dist_text}
+    - Temas Clave (y su frecuencia):
+    {topics_text}
 
-    **Evidencias (muestras de menciones):**
-    ```json
-    {data_json}
-    ```
+    **INSTRUCCIONES:**
+    1.  **Interpreta el Sentimiento:** ¿Es el sentimiento de esta categoría significativamente diferente del promedio general? ¿Qué nos dice la distribución (ej. es polarizado, mayormente neutral, etc.)?
+    2.  **Conecta con los Temas:** ¿Cómo se relacionan los temas más frecuentes con el sentimiento observado? (ej. 'El sentimiento negativo está impulsado principalmente por conversaciones sobre 'precios'').
+    3.  **Extrae un Insight Accionable:** Basado en esta conexión entre datos y temas, ¿cuál es la principal conclusión o recomendación para {client_name}?
 
-    **INSTRUCCIÓN:**
-    - Explica el contexto de mercado, posicionamiento competitivo (usa SOV) y tono del sentimiento.
-    - Resalta patrones y drivers.
-    - Cierra con 2 recomendaciones accionables.
-    (Extensión: 120-180 palabras)
+    **FORMATO:** Redacta un párrafo de análisis denso, profesional y directo. No listes los datos, intégralos en tu narrativa.
     """
