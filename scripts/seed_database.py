@@ -10,7 +10,11 @@ load_dotenv()
 
 # 1. Clientes y Mercados
 CLIENT_DATA = {"name": "Cliente Demo", "api_keys": {}}
-MARKET_DATA = {"name": "España", "description": "Mercado principal"}
+MARKET_DATA = {
+    "name": "España",
+    "description": "Mercado principal",
+    "competitors": ["Competidor A", "Competidor B", "Otra Marca"],
+}
 
 # 2. Categorías Estratégicas de Prompts
 PROMPT_CATEGORIES = [
@@ -74,15 +78,24 @@ def seed_data():
             client_id = client_id_row[0]
         print(f"   - Cliente '{CLIENT_DATA['name']}' asegurado con ID: {client_id}")
 
-        # 2. Insertar Mercado
-        cur.execute("INSERT INTO markets (client_id, name, description) VALUES (%s, %s, %s) ON CONFLICT (client_id, name) DO NOTHING RETURNING id;",
-                    (client_id, MARKET_DATA["name"], MARKET_DATA["description"]))
-        market_id_row = cur.fetchone()
-        if not market_id_row:
-            cur.execute("SELECT id FROM markets WHERE client_id = %s AND name = %s;", (client_id, MARKET_DATA["name"]))
-            market_id = cur.fetchone()[0]
-        else:
-            market_id = market_id_row[0]
+        # 2. Insertar Mercado (con lista de competidores)
+        cur.execute(
+            """
+            INSERT INTO markets (client_id, name, description, competitors)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (client_id, name) DO UPDATE SET
+                description = EXCLUDED.description,
+                competitors = EXCLUDED.competitors
+            RETURNING id;
+            """,
+            (
+                client_id,
+                MARKET_DATA["name"],
+                MARKET_DATA["description"],
+                Json(MARKET_DATA["competitors"]),
+            ),
+        )
+        market_id = cur.fetchone()[0]
         print(f"   - Mercado '{MARKET_DATA['name']}' asegurado con ID: {market_id}")
 
         # 3. Insertar Categorías

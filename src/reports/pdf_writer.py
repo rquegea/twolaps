@@ -9,6 +9,8 @@ from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.charts.axes import XCategoryAxis, YValueAxis
 from reportlab.lib import colors
 
+BR = '<br/>'
+
 def draw_sentiment_chart(data: dict):
     """Crea un gráfico de barras de sentimiento por categoría."""
     drawing = Drawing(width=500, height=250)
@@ -54,7 +56,7 @@ def draw_sentiment_chart(data: dict):
     return drawing
 
 def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
-    """Crea un informe en PDF con KPIs y gráficos."""
+    """Crea un informe en PDF híbrido: parte estratégica + anexo detallado, con KPIs y gráficos."""
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
@@ -89,26 +91,66 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
         chart.drawOn(p, inch, y_position - 250)
         y_position -= 280
 
-    # Salto de página para empezar las secciones de texto
+    # --- Parte Estratégica ---
+    strategic_content = report_content.get("strategic", {})
+
+    # Título de la parte estratégica
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(inch, y_position, "Informe Estratégico")
+    y_position -= 30
+
+    # Resumen Ejecutivo y Hallazgos Principales
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(inch, y_position, "Resumen Ejecutivo y Hallazgos Principales")
+    y_position -= 20
+    summary_text = strategic_content.get("Resumen Ejecutivo y Hallazgos", "")
+    if summary_text:
+        paragraph = Paragraph(summary_text.replace('\n', BR), styles['Justify'])
+        _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
+        if y_position - h < inch:
+            p.showPage()
+            y_position = height - inch
+        paragraph.drawOn(p, inch, y_position - h)
+        y_position -= (h + 30)
+
+    # Plan de Acción Estratégico
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(inch, y_position, "Plan de Acción Estratégico")
+    y_position -= 20
+    plan_text = strategic_content.get("Plan de Acción Estratégico", "")
+    if plan_text:
+        paragraph = Paragraph(plan_text.replace('\n', BR), styles['Justify'])
+        _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
+        if y_position - h < inch:
+            p.showPage()
+            y_position = height - inch
+        paragraph.drawOn(p, inch, y_position - h)
+        y_position -= (h + 30)
+
+    # --- Parte Detallada (Anexo) ---
     p.showPage()
     y_position = height - inch
-    
-    # --- Secciones de Análisis de Texto ---
-    for category_name, text in report_content.items():
-        # ... (el resto del código para escribir los párrafos es el mismo)
-        paragraph_temp = Paragraph(text.replace('\n', '<br/>'), styles['Justify'])
-        w_temp, h_temp = paragraph_temp.wrapOn(p, width - 2 * inch, y_position)
+
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(inch, y_position, "Anexo: Análisis Detallado por Categoría")
+    y_position -= 30
+
+    detailed_content = report_content.get("detailed", {})
+
+    for category_name, text in detailed_content.items():
+        paragraph_temp = Paragraph(text.replace('\n', BR), styles['Justify'])
+        _, h_temp = paragraph_temp.wrapOn(p, width - 2 * inch, y_position)
         
         if y_position - h_temp < inch:
             p.showPage()
             y_position = height - inch
-
+        
         p.setFont("Helvetica-Bold", 14)
         p.drawString(inch, y_position, category_name)
         y_position -= 25
         
-        paragraph = Paragraph(text.replace('\n', '<br/>'), styles['Justify'])
-        w, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
+        paragraph = Paragraph(text.replace('\n', BR), styles['Justify'])
+        _, h = paragraph.wrapOn(p, width - 2 * inch, y_position)
         paragraph.drawOn(p, inch, y_position - h)
         y_position -= (h + 40)
 
