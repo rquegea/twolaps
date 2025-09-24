@@ -75,6 +75,10 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
     Incluye: SOV total, menciones de competidores y SOV por categoría (cliente/total).
     """
     print(f"Agregando datos y calculando KPIs para el cliente {client_id}...")
+    # Usar solo los prompts dentro de esta categoría para SOV/visibilidad
+    COMPETITION_CATEGORY_NAME = os.getenv("COMPETITION_CATEGORY_NAME", "Análisis de competencia")
+    MARKET_CATEGORY_NAME = os.getenv("MARKET_CATEGORY_NAME", "Análisis de mercado")
+    ALLOWED_SOV_CATEGORIES = {COMPETITION_CATEGORY_NAME, MARKET_CATEGORY_NAME}
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
@@ -155,18 +159,47 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
                 (client_id, market_id, start, end),
             )
             return cur.fetchall()
+ 
+        # Helper: serie temporal por día para TODAS las categorías
+        def fetch_time_series(start: str, end: str):
+            cur.execute(
+                """
+                SELECT
+                    DATE(m.created_at) AS day,
+                    pc.name AS category_name,
+                    AVG(COALESCE(m.sentiment, 0)) AS avg_sentiment,
+                    COUNT(*) AS mentions
+                FROM mentions m
+                JOIN queries q ON m.query_id = q.id
+                JOIN prompt_categories pc ON q.category_id = pc.id
+                WHERE m.client_id = %s
+                  AND q.market_id = %s
+                  AND m.created_at >= %s::date
+                  AND m.created_at < (%s::date + INTERVAL '1 day')
+                GROUP BY day, pc.name
+                ORDER BY day ASC, pc.name ASC;
+                """,
+                (client_id, market_id, start, end),
+            )
+            return cur.fetchall()
 
         # Query de menciones con categoría (incluye key_topics) periodo actual
         rows = fetch_mentions_for_period(start_date, end_date)
+        ts_rows = fetch_time_series(start_date, end_date)
 
         aggregated_data["kpis"]["total_mentions"] = len(rows)
         if not rows:
             # Aun así calcular periodo anterior para exponer metadatos
             prev_start, prev_end = _compute_previous_period(start_date, end_date)
             aggregated_data["previous_period"] = {"start_date": prev_start, "end_date": prev_end}
+            aggregated_data["time_series"] = {
+                "mentions_per_day": [],
+                "sentiment_per_day": [],
+            }
             return aggregated_data
 
         total_sentiment = 0.0
+        filtered_mentions_total = 0.0
         # Acumuladores globales para temas/entidades
         global_topics_counter = Counter()
         topic_counts_by_category: dict[str, Counter] = defaultdict(Counter)
@@ -218,24 +251,29 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
                             topic_counts_by_category[category].update(parts)
                 except Exception:
                     pass
-            aggregated_data["kpis"]["mentions_by_category_count"][category] += 1
+            # Solo contar visibilidad (legacy) si es categoría permitida
+            if category in ALLOWED_SOV_CATEGORIES:
+                aggregated_data["kpis"]["mentions_by_category_count"][category] += 1
+                filtered_mentions_total += 1.0
 
-            # --- Detección de marcas para SOV ---
-            detected_brands = detectar_marcas(row['summary'], [client_name] + market_competitors)
-            if detected_brands:
-                for brand in detected_brands:
-                    if brand == client_name:
-                        aggregated_data["kpis"]["sov_by_category"][category]["client"] += 1
-                    else:
-                        aggregated_data["kpis"]["competitor_mentions"][brand] += 1
-                        # Desglose de competidores por categoría
-                        aggregated_data["kpis"]["sov_by_category"][category]["competitors"][brand] += 1
-                    aggregated_data["kpis"]["sov_by_category"][category]["total"] += 1
+            # --- Detección de marcas para SOV (solo categorías permitidas) ---
+            if category in ALLOWED_SOV_CATEGORIES:
+                detected_brands = detectar_marcas(row['summary'], [client_name] + market_competitors)
+                if detected_brands:
+                    for brand in detected_brands:
+                        if brand == client_name:
+                            aggregated_data["kpis"]["sov_by_category"][category]["client"] += 1
+                        else:
+                            aggregated_data["kpis"]["competitor_mentions"][brand] += 1
+                            # Desglose de competidores por categoría
+                            aggregated_data["kpis"]["sov_by_category"][category]["competitors"][brand] += 1
+                        aggregated_data["kpis"]["sov_by_category"][category]["total"] += 1
 
         # Finalizar cálculos
         total_mentions = float(len(rows))
         aggregated_data["kpis"]["average_sentiment"] = float(total_sentiment) / total_mentions
-        aggregated_data["kpis"]["visibility_index"] = total_mentions
+        # Visibilidad basada solo en la categoría de competencia
+        aggregated_data["kpis"]["visibility_index"] = filtered_mentions_total
         
         # Calcular la media de sentimiento por categoría
         for category, values in aggregated_data["kpis"]["sentiment_by_category"].items():
@@ -244,11 +282,45 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
             if isinstance(values.get('key_topics'), Counter):
                 values['key_topics'] = dict(values['key_topics'].most_common(5))
 
-        # Métrica legada: % de visibilidad por categoría (del total de menciones)
+        # Métrica legada: % de visibilidad por categoría (solo dentro de la categoría de competencia)
         sov_legacy = {}
         for category, count in aggregated_data["kpis"]["mentions_by_category_count"].items():
-            sov_legacy[category] = (float(count) / total_mentions) * 100.0 if total_mentions > 0 else 0.0
+            sov_legacy[category] = (float(count) / filtered_mentions_total) * 100.0 if filtered_mentions_total > 0 else 0.0
         aggregated_data["kpis"]["share_of_voice_by_category"] = sov_legacy
+
+        # Serie temporal: construir estructura por categoría y global
+        per_category = defaultdict(lambda: {"mentions_per_day": [], "sentiment_per_day": []})
+        global_by_day = defaultdict(lambda: {"count": 0, "sentiment_sum": 0.0})
+        for r in ts_rows:
+            # DictRow soporta acceso por clave
+            day = r["day"]
+            category_name = r["category_name"]
+            avg_sent = float(r["avg_sentiment"]) if r["avg_sentiment"] is not None else 0.0
+            mcount = int(r["mentions"]) if r["mentions"] is not None else 0
+            day_str = day.strftime("%Y-%m-%d") if hasattr(day, "strftime") else str(day)
+
+            per_category[category_name]["mentions_per_day"].append({"date": day_str, "count": mcount})
+            per_category[category_name]["sentiment_per_day"].append({"date": day_str, "average": avg_sent})
+
+            # Para el global: media ponderada por número de menciones
+            global_by_day[day_str]["count"] += mcount
+            global_by_day[day_str]["sentiment_sum"] += avg_sent * mcount
+
+        # Construir listas ordenadas por fecha para el global
+        sorted_days = sorted(global_by_day.keys())
+        global_mentions = []
+        global_sentiment = []
+        for d in sorted_days:
+            cnt = int(global_by_day[d]["count"]) or 0
+            avg = (global_by_day[d]["sentiment_sum"] / cnt) if cnt > 0 else 0.0
+            global_mentions.append({"date": d, "count": cnt})
+            global_sentiment.append({"date": d, "average": avg})
+
+        aggregated_data["time_series"] = {
+            "mentions_per_day": global_mentions,
+            "sentiment_per_day": global_sentiment,
+            "per_category": per_category,
+        }
 
         # Calcular SOV total basado en marcas detectadas
         total_client_mentions = sum(cat_counts["client"] for cat_counts in aggregated_data["kpis"]["sov_by_category"].values())
@@ -300,16 +372,17 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
                             prev_topic_counts_by_category[category].update(parts)
                 except Exception:
                     pass
-            # Marcas para SOV previo
-            detected_prev = detectar_marcas(row['summary'], [client_name] + market_competitors)
-            if detected_prev:
-                for brand in detected_prev:
-                    if brand == client_name:
-                        prev_sov_by_category[category]["client"] += 1
-                    else:
-                        prev_competitor_mentions[brand] += 1
-                        prev_sov_by_category[category]["competitors"][brand] += 1
-                    prev_sov_by_category[category]["total"] += 1
+            # Marcas para SOV previo (solo categorías permitidas)
+            if category in ALLOWED_SOV_CATEGORIES:
+                detected_prev = detectar_marcas(row['summary'], [client_name] + market_competitors)
+                if detected_prev:
+                    for brand in detected_prev:
+                        if brand == client_name:
+                            prev_sov_by_category[category]["client"] += 1
+                        else:
+                            prev_competitor_mentions[brand] += 1
+                            prev_sov_by_category[category]["competitors"][brand] += 1
+                        prev_sov_by_category[category]["total"] += 1
 
         # KPIs previos simples
         prev_total_mentions = float(len(prev_rows))

@@ -8,6 +8,7 @@ from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.charts.axes import XCategoryAxis, YValueAxis
 from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
 
 BR = '<br/>'
 
@@ -212,6 +213,39 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
     if chart_visibility:
         chart_visibility.drawOn(p, inch, y_position - 250)
         y_position -= 280
+
+    # --- NUEVOS GRÁFICOS: Series temporales ---
+    charts = metadata.get('charts', {}) if isinstance(metadata, dict) else {}
+    sentiment_img = charts.get('sentiment_trend')
+    mentions_img = charts.get('mentions_trend')
+
+    if sentiment_img and y_position - 230 < inch:
+        p.showPage()
+        y_position = height - inch
+    if sentiment_img:
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(inch, y_position, "Evolución del Sentimiento (diario)")
+        y_position -= 20
+        try:
+            img = ImageReader(sentiment_img)
+            p.drawImage(img, inch, y_position - 180, width=width - 2 * inch, height=180, preserveAspectRatio=True, mask='auto')
+            y_position -= 200
+        except Exception:
+            pass
+
+    if mentions_img and y_position - 230 < inch:
+        p.showPage()
+        y_position = height - inch
+    if mentions_img:
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(inch, y_position, "Evolución del Volumen de Menciones (diario)")
+        y_position -= 20
+        try:
+            img2 = ImageReader(mentions_img)
+            p.drawImage(img2, inch, y_position - 180, width=width - 2 * inch, height=180, preserveAspectRatio=True, mask='auto')
+            y_position -= 200
+        except Exception:
+            pass
 
     # --- Parte Estratégica ---
     strategic_content = report_content.get("strategic", {})

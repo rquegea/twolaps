@@ -12,6 +12,13 @@ from src.reports.prompts import (
     get_trends_anomalies_prompt,
 )
 from src.reports.correlation_engine import compute_cross_category_correlations
+from src.reports.plotter import (
+    generate_sentiment_trend_plot,
+    generate_mentions_trend_plot,
+)
+import tempfile
+import os
+
 
 def generate_report_content(aggregated_data: dict) -> dict:
     """
@@ -137,4 +144,23 @@ def generate_report_content(aggregated_data: dict) -> dict:
         report_content["strategic"]["Tendencias y Señales Emergentes"] = ""
 
     print("✅ Contenido del informe híbrido generado.")
+
+    # -------------------------
+    # Fase 5: Gráficos de series temporales
+    # -------------------------
+    try:
+        tmp_dir = tempfile.mkdtemp(prefix="ia_report_")
+        ts_data = aggregated_data.get("time_series", {})
+        sentiment_img = generate_sentiment_trend_plot(ts_data, tmp_dir)
+        mentions_img = generate_mentions_trend_plot(ts_data, tmp_dir)
+        charts = {}
+        if sentiment_img and os.path.exists(sentiment_img):
+            charts["sentiment_trend"] = sentiment_img
+        if mentions_img and os.path.exists(mentions_img):
+            charts["mentions_trend"] = mentions_img
+        if charts:
+            aggregated_data["charts"] = charts
+    except Exception as e:
+        print(f"Error generando gráficos de serie temporal: {e}")
+
     return report_content
