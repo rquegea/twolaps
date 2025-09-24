@@ -215,8 +215,10 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
             except Exception:
                 pass
 
-        # Lista de marcas dinámica
-        all_brands = [client_name] + list(discovered_competitors)
+        # Lista combinada (estática de DB + dinámica) única para detección de marcas
+        combined_competitors = sorted({c.strip() for c in (market_competitors or []) if c} | {e.strip() for e in discovered_competitors if e})
+        aggregated_data["combined_competitors"] = combined_competitors
+        all_brands = [client_name] + combined_competitors
 
         for row in rows:
             category = row['category_name']
