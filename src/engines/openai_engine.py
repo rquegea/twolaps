@@ -1,7 +1,9 @@
 import os
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
+from src.reports.prompts import get_entity_extraction_prompt
+import json
 
 # Cargar .env (buscando hacia arriba si no está en el cwd)
 load_dotenv(find_dotenv())
@@ -60,3 +62,16 @@ def fetch_openai_response(prompt: str, model: str = "gpt-4o-mini") -> Tuple[str,
     except Exception as e:
         print(f"Error en la llamada a OpenAI: {e}")
         return "", {"error": str(e)}
+
+
+def extract_entities(text: str, client_name: str, model: str = "gpt-4o-mini") -> List[str]:
+    """Extrae entidades (empresas/escuelas/marcas) del texto, excluyendo la marca del cliente."""
+    prompt = get_entity_extraction_prompt(text or "", client_name or "")
+    response_text, _ = fetch_openai_response(prompt, model=model)
+    try:
+        result = json.loads(response_text.strip())
+        if isinstance(result, list):
+            return [str(x).strip() for x in result if str(x).strip()]
+    except Exception:
+        pass
+    return []

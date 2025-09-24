@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import psycopg2
 import psycopg2.extras
 from collections import defaultdict, Counter
+from src.engines.openai_engine import extract_entities
 
 def get_db_connection():
     """Establece la conexión con la base de datos.
@@ -203,6 +204,20 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
         # Acumuladores globales para temas/entidades
         global_topics_counter = Counter()
         topic_counts_by_category: dict[str, Counter] = defaultdict(Counter)
+        # Descubrir competidores dinámicamente a partir de las menciones
+        discovered_competitors = set()
+        for r in rows:
+            try:
+                ents = extract_entities(r['summary'] or "", client_name)
+                for e in ents:
+                    if e and e != client_name:
+                        discovered_competitors.add(e)
+            except Exception:
+                pass
+
+        # Lista de marcas dinámica
+        all_brands = [client_name] + list(discovered_competitors)
+
         for row in rows:
             category = row['category_name']
             # Normalizar a float para evitar mezclar Decimal con float más adelante
@@ -258,7 +273,7 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
 
             # --- Detección de marcas para SOV (solo categorías permitidas) ---
             if category in ALLOWED_SOV_CATEGORIES:
-                detected_brands = detectar_marcas(row['summary'], [client_name] + market_competitors)
+                detected_brands = detectar_marcas(row['summary'], all_brands)
                 if detected_brands:
                     for brand in detected_brands:
                         if brand == client_name:
@@ -374,7 +389,7 @@ def aggregate_data_for_report(client_id: int, market_id: int, start_date: str, e
                     pass
             # Marcas para SOV previo (solo categorías permitidas)
             if category in ALLOWED_SOV_CATEGORIES:
-                detected_prev = detectar_marcas(row['summary'], [client_name] + market_competitors)
+                detected_prev = detectar_marcas(row['summary'], all_brands)
                 if detected_prev:
                     for brand in detected_prev:
                         if brand == client_name:

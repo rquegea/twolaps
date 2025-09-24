@@ -21,6 +21,21 @@ import tempfile
 import os
 
 
+PRIORITY_CATEGORIES = [
+    "Análisis de competencia",
+    "Análisis de marketing y estrategia",
+    "Análisis de mercado",
+]
+
+
+def _ordered_categories(mentions_by_category: dict) -> list:
+    present = [c for c, data in mentions_by_category.items() if data]
+    # Prioritarios primero (en orden), luego el resto alfabético
+    prioritized = [c for c in PRIORITY_CATEGORIES if c in present]
+    remaining = sorted([c for c in present if c not in PRIORITY_CATEGORIES])
+    return prioritized + remaining
+
+
 def generate_report_content(aggregated_data: dict) -> dict:
     """
     Orquesta la generación del contenido textual para el informe híbrido:
@@ -31,6 +46,9 @@ def generate_report_content(aggregated_data: dict) -> dict:
     mentions_by_category = aggregated_data.get("mentions_by_category", {})
     # all_summaries no se usa en la versión con deep dive basado en KPIs
     kpis = aggregated_data.get("kpis", {})
+
+    ordered_cats = _ordered_categories(mentions_by_category)
+    aggregated_data["ordered_categories"] = ordered_cats
 
     print("Generando contenido del informe híbrido con IA avanzada...")
 
@@ -126,7 +144,8 @@ def generate_report_content(aggregated_data: dict) -> dict:
     # -------------------------
     # Fase 3: Contenido Detallado (Anexo)
     # -------------------------
-    for category_name, data in mentions_by_category.items():
+    for category_name in ordered_cats:
+        data = mentions_by_category.get(category_name) or []
         if not data:
             continue
         print(f"  - Analizando categoría para anexo: {category_name}")
@@ -162,11 +181,13 @@ def generate_report_content(aggregated_data: dict) -> dict:
             charts["sentiment_trend"] = sentiment_img
         if mentions_img and os.path.exists(mentions_img):
             charts["mentions_trend"] = mentions_img
-        # Por categoría
+        # Por categoría (siguiendo prioridad)
         per_cat = ts_data.get("per_category", {}) if isinstance(ts_data, dict) else {}
         cat_charts = {}
-        for cat_name, series in per_cat.items():
-            # Crear subdirectorio por categoría para evitar colisiones de nombre
+        for cat_name in ordered_cats:
+            series = per_cat.get(cat_name)
+            if not series:
+                continue
             safe_cat = "".join([c if c.isalnum() else "_" for c in str(cat_name)])
             cat_dir = os.path.join(tmp_dir, f"cat_{safe_cat}")
             os.makedirs(cat_dir, exist_ok=True)

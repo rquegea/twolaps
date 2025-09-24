@@ -38,6 +38,19 @@ def get_detailed_category_prompt(category_name: str, category_data: list, all_su
     return prompt
 
 
+def get_entity_extraction_prompt(text: str, client_name: str) -> str:
+    """Prompt para extraer entidades (empresas/escuelas/marcas) como lista JSON, excluyendo la marca cliente."""
+    safe_text = text or ""
+    return (
+        "Eres un asistente experto en extracción de entidades. "
+        "Analiza el siguiente texto y extrae una lista de todos los nombres de empresas, escuelas, universidades o marcas que se mencionan. "
+        f"Excluye de la lista el nombre '{client_name}'. "
+        "Devuelve el resultado como una lista JSON de strings. Si no encuentras ninguna entidad, devuelve una lista vacía.\n\n"
+        "TEXTO A ANALIZAR:\n\n" + safe_text + "\n\n"
+        "DEVUELVE SOLO LA LISTA JSON (sin explicación)."
+    )
+
+
 def get_insight_extraction_prompt(aggregated_data: dict) -> str:
     """
     Genera un prompt para extraer un JSON de insights estratégicos a partir de los datos agregados.
