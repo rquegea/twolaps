@@ -155,6 +155,64 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
     p.setFont("Helvetica", 11)
     p.drawString(inch, y_position, f"Periodo: {metadata.get('start_date')} a {metadata.get('end_date')}")
     y_position -= 40
+
+    # --- DASHBOARD 2x2 ---
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(inch, y_position, "Dashboard Ejecutivo")
+    y_position -= 20
+
+    # Preparar gráficos disponibles
+    kpis = metadata.get('kpis', {})
+    charts = metadata.get('charts', {}) if isinstance(metadata, dict) else {}
+
+    dash_sent = draw_sentiment_chart(kpis)
+    dash_vol = draw_visibility_by_topic_chart(kpis)
+    dash_sov = draw_sov_chart(kpis)
+    # Reutilizamos el gráfico de sentimiento global y volumen global como imágenes si existen
+    dash_sent_global_img = charts.get('sentiment_trend')
+    dash_mentions_global_img = charts.get('mentions_trend')
+
+    # Colocar en cuadrícula 2x2
+    start_x = inch
+    start_y = y_position - 10
+    cell_w = (width - 2 * inch) / 2
+    cell_h = 180
+
+    # Celda 1: Sentimiento Global (imagen o barras por categoría)
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(start_x, start_y, "Sentimiento Global")
+    if dash_sent_global_img:
+        try:
+            img = ImageReader(dash_sent_global_img)
+            p.drawImage(img, start_x, start_y - cell_h, width=cell_w - 10, height=cell_h - 20, preserveAspectRatio=True, mask='auto')
+        except Exception:
+            pass
+    elif dash_sent:
+        dash_sent.drawOn(p, start_x, start_y - cell_h)
+
+    # Celda 2: Volumen Global (imagen o SOV cliente por categoría)
+    p.drawString(start_x + cell_w, start_y, "Volumen Global")
+    if dash_mentions_global_img:
+        try:
+            img2 = ImageReader(dash_mentions_global_img)
+            p.drawImage(img2, start_x + cell_w, start_y - cell_h, width=cell_w - 10, height=cell_h - 20, preserveAspectRatio=True, mask='auto')
+        except Exception:
+            pass
+    elif dash_vol:
+        dash_vol.drawOn(p, start_x + cell_w, start_y - cell_h)
+
+    # Fila 2
+    row2_y = start_y - cell_h - 40
+    p.drawString(start_x, row2_y + cell_h + 20, "SOV por Categoría (legacy)")
+    if dash_sov:
+        dash_sov.drawOn(p, start_x, row2_y)
+
+    p.drawString(start_x + cell_w, row2_y + cell_h + 20, "SOV Cliente por Categoría")
+    if dash_vol:
+        dash_vol.drawOn(p, start_x + cell_w, row2_y)
+
+    p.showPage()
+    y_position = height - inch
     
     # --- NUEVA SECCIÓN: KPIs Y GRÁFICOS ---
     p.setFont("Helvetica-Bold", 14)
@@ -246,6 +304,35 @@ def create_pdf_report(report_content: dict, metadata: dict) -> io.BytesIO:
             y_position -= 200
         except Exception:
             pass
+
+    # Gráficos por categoría
+    per_cat = charts.get('per_category', {}) if isinstance(charts, dict) else {}
+    for cat_name, imgs in per_cat.items():
+        if y_position - 260 < inch:
+            p.showPage()
+            y_position = height - inch
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(inch, y_position, f"Serie temporal - {cat_name}")
+        y_position -= 20
+        s_img = imgs.get('sentiment_trend')
+        m_img = imgs.get('mentions_trend')
+        if s_img:
+            try:
+                si = ImageReader(s_img)
+                p.drawImage(si, inch, y_position - 160, width=width - 2 * inch, height=160, preserveAspectRatio=True, mask='auto')
+                y_position -= 180
+            except Exception:
+                pass
+        if m_img:
+            if y_position - 180 < inch:
+                p.showPage()
+                y_position = height - inch
+            try:
+                mi = ImageReader(m_img)
+                p.drawImage(mi, inch, y_position - 160, width=width - 2 * inch, height=160, preserveAspectRatio=True, mask='auto')
+                y_position -= 180
+            except Exception:
+                pass
 
     # --- Parte Estratégica ---
     strategic_content = report_content.get("strategic", {})

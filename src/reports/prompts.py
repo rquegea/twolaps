@@ -42,38 +42,43 @@ def get_insight_extraction_prompt(aggregated_data: dict) -> str:
     """
     Genera un prompt para extraer un JSON de insights estratégicos a partir de los datos agregados.
     La salida DEBE SER únicamente un objeto JSON válido, sin texto adicional.
+    Instruye a la IA a analizar explícitamente series temporales (globales y por categoría),
+    detectar anomalías, cruzar volumen vs. sentimiento, formular hipótesis y proponer acciones.
     """
     data_json = json.dumps(aggregated_data, ensure_ascii=False, default=str)
     return (
-        "Eres un Analista de Inteligencia de Mercado Senior. "
-        "Analiza todos los datos proporcionados y devuelve EXCLUSIVAMENTE un objeto JSON con la siguiente estructura exacta. "
+        "Eres un Analista de Datos y Estratega Senior. "
+        "Analiza todos los datos proporcionados y devuelve EXCLUSIVAMENTE un objeto JSON con la estructura especificada. "
         "NO incluyas texto explicativo, comentarios ni markdown, solo el JSON. "
         "Los datos a analizar son:\n\n"
         "```json\n" + data_json + "\n```\n\n"
+        "Objetivos de análisis (aplícalos al conjunto global y por categoría cuando existan datos):\n"
+        "1) Serie temporal - tendencia: Describe si el sentimiento y el volumen son ascendentes, descendentes, estables o volátiles.\n"
+        "2) Anomalías: Identifica picos/caídas significativas; indica fechas y magnitud (aprox.).\n"
+        "3) Cruce Sentimiento vs Volumen: Explica si aumentos de conversación coinciden con caídas de sentimiento (o viceversa).\n"
+        "4) Hipótesis: Aporta explicaciones plausibles de las anomalías (p.ej. campaña de competidor, noticia, lanzamiento).\n"
+        "5) Conclusiones estratégicas: Resume oportunidades, riesgos y un plan de acción concreto.\n\n"
         "Estructura esperada del JSON de salida (rellena con tu análisis):\n\n"
         "{\n"
-        "  \"executive_summary\": \"Un resumen de alto nivel de 2-3 frases con los hallazgos más críticos.\",\n"
+        "  \"executive_summary\": \"2-3 frases con lo más crítico y útil para negocio.\",\n"
+        "  \"time_series_analysis\": {\n"
+        "    \"global\": {\n"
+        "      \"trend\": \"ascendente|descendente|estable|volátil\",\n"
+        "      \"anomalies\": [ { \"date\": \"YYYY-MM-DD\", \"type\": \"spike|drop\", \"metric\": \"mentions|sentiment\", \"note\": \"breve explicación\" } ],\n"
+        "      \"sentiment_vs_volume\": \"breve explicación del cruce\"\n"
+        "    },\n"
+        "    \"by_category\": [\n"
+        "      { \"category\": \"Nombre\", \"trend\": \"...\", \"anomalies\": [ ... ], \"sentiment_vs_volume\": \"...\" }\n"
+        "    ]\n"
+        "  },\n"
         "  \"key_findings\": [\n"
-        "    \"Un hallazgo importante sobre el mercado.\",\n"
-        "    \"Otro hallazgo relevante sobre la competencia.\",\n"
+        "    \"Un hallazgo importante sobre el mercado (basado en series y KPIs).\",\n"
+        "    \"Otro hallazgo relevante sobre la competencia (SOV, picos, etc.).\",\n"
         "    \"Un tercer hallazgo sobre la percepción del cliente.\"\n"
         "  ],\n"
-        "  \"opportunities\": [\n"
-        "    {\n"
-        "      \"opportunity\": \"Descripción de una oportunidad de negocio clara.\",\n"
-        "      \"impact\": \"Alto/Medio/Bajo\"\n"
-        "    }\n"
-        "  ],\n"
-        "  \"risks\": [\n"
-        "    {\n"
-        "      \"risk\": \"Descripción de un riesgo o amenaza potencial.\",\n"
-        "      \"mitigation\": \"Sugerencia sobre cómo mitigar este riesgo.\"\n"
-        "    }\n"
-        "  ],\n"
-        "  \"recommendations\": [\n"
-        "    \"Una recomendación estratégica y accionable.\",\n"
-        "    \"Otra recomendación clara y concisa.\"\n"
-        "  ]\n"
+        "  \"opportunities\": [ { \"opportunity\": \"Descripción\", \"impact\": \"Alto|Medio|Bajo\" } ],\n"
+        "  \"risks\": [ { \"risk\": \"Descripción\", \"mitigation\": \"Acción\" } ],\n"
+        "  \"recommendations\": [ \"Acción 1\", \"Acción 2\", \"Acción 3\" ]\n"
         "}"
     )
 
@@ -181,7 +186,8 @@ def get_competitive_analysis_prompt(aggregated_data: dict) -> str:
     comp_json = json.dumps(competitor_mentions, ensure_ascii=False, indent=2)
     sov_cat_json = json.dumps(sov_by_cat, ensure_ascii=False, indent=2)
 
-    return f"""
+    return (
+        f"""
     **ROL:** Eres un Analista de Competencia.
     **TAREA:** Redacta la sección "Análisis Competitivo" del informe.
 
@@ -201,6 +207,7 @@ def get_competitive_analysis_prompt(aggregated_data: dict) -> str:
     - Señala categorías donde el cliente está subrepresentado y oportunidades para ganar share.
     - Concluye con 3 bullets de movimientos competitivos recomendados.
     """
+    )
 
 
 def get_deep_dive_analysis_prompt(category_name: str, kpis: dict, client_name: str) -> str:

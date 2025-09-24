@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict, Counter
 from typing import Dict, List, Tuple, Any
+import numpy as np
 
 
 def _index_mentions_by_topic(mentions_by_category: Dict[str, List[dict]]) -> Tuple[Dict[str, Dict[str, List[dict]]], Counter]:
@@ -37,6 +38,59 @@ def _average_sentiment(mentions: List[dict]) -> float:
 def _keyword_match(text: str, keywords: List[str]) -> bool:
     lowered = text.lower()
     return any(k in lowered for k in keywords)
+
+
+def _pearson_safe(series_x: List[float], series_y: List[float]) -> float | None:
+    """Calcula Pearson r de forma segura (requiere >=3 puntos y varianza>0)."""
+    if not series_x or not series_y:
+        return None
+    n = min(len(series_x), len(series_y))
+    if n < 3:
+        return None
+    x = np.array(series_x[:n], dtype=float)
+    y = np.array(series_y[:n], dtype=float)
+    if np.isclose(x.std(ddof=1), 0.0) or np.isclose(y.std(ddof=1), 0.0):
+        return None
+    r = float(np.corrcoef(x, y)[0, 1])
+    return r
+
+
+def compute_time_series_correlations(aggregated_data: dict) -> dict:
+    """
+    Calcula correlaciones de series temporales entre:
+    - Global: mentions_per_day vs sentiment_per_day
+    - Por categoría: lo mismo para cada categoría disponible en time_series['per_category']
+    Devuelve un dict con 'global' y 'by_category' con coeficientes r.
+    """
+    ts = aggregated_data.get("time_series", {}) or {}
+    # Global
+    g_mentions = ts.get("mentions_per_day", []) or []
+    g_sentiment = ts.get("sentiment_per_day", []) or []
+    # Alinear por fecha
+    map_m = {e.get("date"): float(e.get("count", 0)) for e in g_mentions}
+    map_s = {e.get("date"): float(e.get("average", 0.0)) for e in g_sentiment}
+    common_dates = sorted(set(map_m.keys()) & set(map_s.keys()))
+    gx = [map_m[d] for d in common_dates]
+    gy = [map_s[d] for d in common_dates]
+    r_global = _pearson_safe(gx, gy)
+
+    # Por categoría
+    by_cat = {}
+    per_cat = ts.get("per_category", {}) or {}
+    for cat_name, series in per_cat.items():
+        cm = {e.get("date"): float(e.get("count", 0)) for e in series.get("mentions_per_day", []) or []}
+        cs = {e.get("date"): float(e.get("average", 0.0)) for e in series.get("sentiment_per_day", []) or []}
+        c_dates = sorted(set(cm.keys()) & set(cs.keys()))
+        cx = [cm[d] for d in c_dates]
+        cy = [cs[d] for d in c_dates]
+        r = _pearson_safe(cx, cy)
+        if r is not None:
+            by_cat[cat_name] = r
+
+    return {
+        "global_mentions_vs_sentiment": r_global,
+        "by_category_mentions_vs_sentiment": by_cat,
+    }
 
 
 def compute_cross_category_correlations(aggregated_data: dict) -> dict:

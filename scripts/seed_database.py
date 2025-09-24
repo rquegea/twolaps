@@ -25,6 +25,7 @@ PROMPT_CATEGORIES = [
     ("Análisis de oportunidades", "Nuevos nichos, innovación de producto, territorios de comunicación."),
     ("Análisis de riesgos", "Crisis potenciales, quejas recurrentes, temas sensibles."),
     ("Análisis contextual", "Factores externos: noticias, regulación, economía, cultura."),
+    ("Análisis de marketing y estrategia", "Canales, contenidos y posicionamiento para captar a jóvenes indecisos."),
 ]
 
 # 3. Set de Prompts Estratégicos para The Core School
@@ -39,7 +40,6 @@ PROMPTS_TO_INSERT = [
     ('¿Dónde ofrecen formación profesional para la creación de guiones en Madrid?', 'Análisis de mercado'),
     ('¿Dónde estudiar guion para series en España en escuelas con enfoque práctico?', 'Análisis de mercado'),
     ('¿Cuáles son las mejores escuelas de postproducción y VFX en España?', 'Análisis de mercado'),
-    ('¿Qué canales digitales son más efectivos para llegar a jóvenes interesados en audiovisual en España?', 'Análisis de mercado'),
 
     # Categoría: Análisis de competencia
     ('¿Cuál es el mejor máster en dirección de cine en Europa, enfocándose en escuelas con conexión directa con la industria?', 'Análisis de competencia'),
@@ -49,10 +49,15 @@ PROMPTS_TO_INSERT = [
     ('¿Cuáles son las mejores escuelas en Madrid para formarse en producción de televisión?', 'Análisis de competencia'),
     ('¿Cuáles son las mejores escuelas en Madrid para formarse en producción de televisión, del estilo de The Core School?', 'Análisis de competencia'),
     ('¿Cómo evoluciona el \'share of voice\' y el sentimiento online de The Core School frente a sus competidores en España?', 'Análisis de competencia'),
+    # Nuevos (Análisis de competencia)
+    ("¿Qué otras alternativas de formación (FP, grados universitarios, bootcamps, academias online) aparecen con más frecuencia en el 'set de consideración' de los jóvenes indecisos en España cuando comparan opciones frente a The Core, Escuela Superior de Audiovisuales?", 'Análisis de competencia'),
+    ("¿Qué pain points destacan los jóvenes indecisos y sus padres sobre la oferta actual en formación audiovisual en España (ej. programas largos, costes altos, poca conexión con la industria, falta de prácticas reales), y cómo se diferencian frente a la propuesta de The Core?", 'Análisis de competencia'),
 
     # Categoría: Análisis de sentimiento y reputación
     ('¿Qué escuelas de audiovisual en España tienen los mejores acuerdos con productoras y cadenas de televisión?', 'Análisis de sentimiento y reputación'),
     ('¿Qué centros de formación audiovisual tienen la mejor reputación profesional en España, excluyendo universidades públicas?', 'Análisis de sentimiento y reputación'),
+    # Nuevo (Análisis de sentimiento y reputación)
+    ('¿Cómo perciben los jóvenes indecisos en España la industria audiovisual —incluyendo áreas como realización, producción, iluminación, guion y desarrollo de formatos televisivos— en términos de prestigio, empleabilidad, estabilidad e innovación, y cómo se asocia la marca The Core, Escuela Superior de Audiovisuales a estas percepciones?', 'Análisis de sentimiento y reputación'),
 
     # Categoría: Análisis de oportunidades (basado en Empleo y Salidas)
     ('¿Qué trabajos en el sector audiovisual tienen buen sueldo y qué formación especializada se necesita?', 'Análisis de oportunidades'),
@@ -65,10 +70,23 @@ PROMPTS_TO_INSERT = [
 
     # Categoría: Análisis contextual (Audiencia, Motivaciones, Preocupaciones)
     ('¿Qué intereses en el sector audiovisual y producción de contenidos muestran los jóvenes indecisos en España?', 'Análisis contextual'),
-    ('¿Qué \'triggers\' o referentes motivan a los jóvenes en España a interesarse por carreras en el sector audiovisual y qué emociones asocian a ello?', 'Análisis contextual'),
+    ("¿Qué 'triggers' o referentes motivan a los jóvenes en España a interesarse por carreras en el sector audiovisual y qué emociones asocian a ello?", 'Análisis contextual'),
     ('¿Qué motivaciones llevan a los jóvenes en España a preferir carreras creativas en audiovisual frente a estudios tradicionales?', 'Análisis contextual'),
     ('¿Cuáles son las preocupaciones de los padres en España sobre las carreras en el sector audiovisual y qué fuentes consultan para informarse?', 'Análisis contextual'),
     ('¿Qué argumentos (casos de éxito, salarios, empleo) son más persuasivos para los padres en España sobre estudiar carreras audiovisuales?', 'Análisis contextual'),
+    # Nuevos (Análisis contextual)
+    ("¿Cuál es la estimación del número de jóvenes en España (16-25 años) que se declaran indecisos sobre su futuro académico/profesional y qué intereses emergentes en el ámbito audiovisual (producción, realización, iluminación, guion, postproducción, desarrollo de formatos televisivos como concursos o realities) destacan en sus conversaciones online?", 'Análisis contextual'),
+    ("¿Qué 'triggers' (eventos, experiencias, contenidos o referentes) mencionan los jóvenes indecisos en España como detonantes para interesarse por carreras en el audiovisual —como realización, guion, producción o formatos televisivos— y qué emociones expresan en esos momentos (curiosidad, esperanza, inseguridad)?", 'Análisis contextual'),
+    ("¿Cuáles son las motivaciones principales que impulsan a los jóvenes indecisos en España a considerar carreras fuera de las tradicionales (ej. creatividad, flexibilidad, propósito, ingresos vinculados a la industria audiovisual), y qué factores producen rechazo en los estudios convencionales (exigencia, hartazgo, falta de libertad)?", 'Análisis contextual'),
+    ("¿Qué tipos de trabajos o estilos de vida rechazan explícitamente los jóvenes indecisos en España (ej. 'trabajo de oficina', '9 a 5', 'oposiciones'), qué carreras vinculadas al audiovisual (realización, guion, producción, iluminación, postproducción) se asocian con una mayor sensación de libertad, y entre ellas cuáles ofrecen mejores perspectivas de remuneración tras finalizar los estudios?", 'Análisis contextual'),
+    ("¿Cuáles son las preocupaciones más repetidas por los padres en España cuando sus hijos consideran carreras en el ámbito audiovisual (empleabilidad, coste, prestigio, seguridad laboral), y qué fuentes consultan para informarse sobre instituciones como The Core, Escuela Superior de Audiovisuales?", 'Análisis contextual'),
+    ("¿Qué tipo de argumentos, datos o testimonios resultan más persuasivos para convencer a los padres en España sobre la viabilidad de estudiar en el ámbito audiovisual (ej. tasas de empleo, casos de éxito, salarios, trayectorias internacionales), y cómo puede The Core posicionarse como referencia en esos mensajes?", 'Análisis contextual'),
+
+    # (NUEVA) Categoría: Análisis de marketing y estrategia
+    ('¿Qué canales digitales son más efectivos para llegar a jóvenes interesados en audiovisual en España?', 'Análisis de marketing y estrategia'),
+    ('¿Cuáles son las búsquedas y tendencias digitales más frecuentes en España relacionadas con "carreras audiovisuales", "profesiones creativas", "empleos del futuro" o "formación en realización, guion y producción", y cómo pueden vincularse a la propuesta educativa de The Core, Escuela Superior de Audiovisuales?', 'Análisis de marketing y estrategia'),
+    ('¿Qué canales y plataformas digitales (TikTok, YouTube, Twitch, Instagram, foros) son los más efectivos para llegar a jóvenes indecisos en España, y qué formatos de contenido vinculados al audiovisual (testimonios de alumnos, casos de éxito en realización, guion o producción, experiencias en concursos/realities) generan mayor engagement para instituciones como The Core?', 'Análisis de marketing y estrategia'),
+    ('¿Cómo evoluciona el "share of voice" y el sentimiento online de The Core, Escuela Superior de Audiovisuales frente a sus principales competidores en España, y qué oportunidades de posicionamiento aparecen al vincular su marca con términos como "empleos del futuro", "formación audiovisual", "realización", "guion" o "producción de formatos televisivos"?', 'Análisis de marketing y estrategia'),
 ]
 
 

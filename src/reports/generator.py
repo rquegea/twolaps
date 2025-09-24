@@ -12,6 +12,7 @@ from src.reports.prompts import (
     get_trends_anomalies_prompt,
 )
 from src.reports.correlation_engine import compute_cross_category_correlations
+from src.reports.correlation_engine import compute_time_series_correlations
 from src.reports.plotter import (
     generate_sentiment_trend_plot,
     generate_mentions_trend_plot,
@@ -54,7 +55,7 @@ def generate_report_content(aggregated_data: dict) -> dict:
             if cleaned.startswith("```json"):
                 cleaned = cleaned[len("```json"):]
             if cleaned.startswith("```"):
-                cleaned = cleaned[len("```"):]
+                cleaned = cleaned[len("```")]
             if cleaned.endswith("```"):
                 cleaned = cleaned[: -len("```")]
             insights_data = json.loads(cleaned.strip())
@@ -108,10 +109,12 @@ def generate_report_content(aggregated_data: dict) -> dict:
         report_content["strategic"]["Análisis Competitivo"] = ""
 
     # -------------------------
-    # Fase 2.5: Correlaciones Transversales
+    # Fase 2.5: Correlaciones Transversales + Series temporales
     # -------------------------
     try:
         correlation_data = compute_cross_category_correlations(aggregated_data)
+        ts_corr = compute_time_series_correlations(aggregated_data)
+        correlation_data["time_series_correlations"] = ts_corr
         corr_prompt = get_correlation_interpretation_prompt(aggregated_data, correlation_data)
         corr_text, _ = fetch_openai_response(corr_prompt, model="gpt-4o")
         report_content["cross"]["Correlaciones Transversales"] = corr_text
@@ -146,11 +149,12 @@ def generate_report_content(aggregated_data: dict) -> dict:
     print("✅ Contenido del informe híbrido generado.")
 
     # -------------------------
-    # Fase 5: Gráficos de series temporales
+    # Fase 5: Gráficos de series temporales (global y por categoría)
     # -------------------------
     try:
         tmp_dir = tempfile.mkdtemp(prefix="ia_report_")
         ts_data = aggregated_data.get("time_series", {})
+        # Global
         sentiment_img = generate_sentiment_trend_plot(ts_data, tmp_dir)
         mentions_img = generate_mentions_trend_plot(ts_data, tmp_dir)
         charts = {}
@@ -158,8 +162,27 @@ def generate_report_content(aggregated_data: dict) -> dict:
             charts["sentiment_trend"] = sentiment_img
         if mentions_img and os.path.exists(mentions_img):
             charts["mentions_trend"] = mentions_img
-        if charts:
+        # Por categoría
+        per_cat = ts_data.get("per_category", {}) if isinstance(ts_data, dict) else {}
+        cat_charts = {}
+        for cat_name, series in per_cat.items():
+            # Crear subdirectorio por categoría para evitar colisiones de nombre
+            safe_cat = "".join([c if c.isalnum() else "_" for c in str(cat_name)])
+            cat_dir = os.path.join(tmp_dir, f"cat_{safe_cat}")
+            os.makedirs(cat_dir, exist_ok=True)
+            s_img = generate_sentiment_trend_plot(series, cat_dir)
+            m_img = generate_mentions_trend_plot(series, cat_dir)
+            entry = {}
+            if s_img and os.path.exists(s_img):
+                entry["sentiment_trend"] = s_img
+            if m_img and os.path.exists(m_img):
+                entry["mentions_trend"] = m_img
+            if entry:
+                cat_charts[cat_name] = entry
+        if charts or cat_charts:
             aggregated_data["charts"] = charts
+            if cat_charts:
+                aggregated_data["charts"]["per_category"] = cat_charts
     except Exception as e:
         print(f"Error generando gráficos de serie temporal: {e}")
 
