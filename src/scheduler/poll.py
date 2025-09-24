@@ -2,29 +2,41 @@ import os
 import time
 import psycopg2
 from psycopg2.extras import Json
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from datetime import datetime
+
+# Cargar variables de entorno ANTES de importar motores
+load_dotenv(find_dotenv())
 
 # Cargar las funciones de los motores de IA
 from src.engines.openai_engine import fetch_openai_response
 from src.engines.perplexity_engine import fetch_perplexity_response
 from src.engines.sentiment_engine import analyze_and_summarize
 
-# Cargar variables de entorno
-load_dotenv()
-
 def get_db_connection():
-    """Establece la conexión con la base de datos."""
+    """Establece la conexión con la base de datos (robusta para local o Docker)."""
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        return psycopg2.connect(database_url)
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "postgres"),
-        port=os.getenv("DB_PORT", 5432),
-        dbname=os.getenv("POSTGRES_DB"),
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD")
-    )
+        try:
+            return psycopg2.connect(database_url)
+        except Exception:
+            pass
+    try:
+        return psycopg2.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=int(os.getenv("DB_PORT", 5433)),
+            dbname=os.getenv("POSTGRES_DB", "ia_reports_db"),
+            user=os.getenv("POSTGRES_USER", "report_user"),
+            password=os.getenv("POSTGRES_PASSWORD", "strong_password"),
+        )
+    except Exception:
+        return psycopg2.connect(
+            host="localhost",
+            port=5433,
+            dbname="ia_reports_db",
+            user="report_user",
+            password="strong_password",
+        )
 
 def run_poll():
     """

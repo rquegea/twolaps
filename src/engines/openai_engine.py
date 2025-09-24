@@ -1,9 +1,24 @@
 import os
 from typing import Tuple, Dict, Any
+from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
 
-# Inicializar cliente de OpenAI (usa OPENAI_API_KEY del entorno)
-client = OpenAI()
+# Cargar .env (buscando hacia arriba si no está en el cwd)
+load_dotenv(find_dotenv())
+
+_api_key = (
+    os.getenv("OPENAI_API_KEY")
+    or os.getenv("OPENAI_API_KEY_SK")
+    or os.getenv("OPENAI_KEY")
+    or os.getenv("OPENAI_TOKEN")
+)
+
+if not _api_key:
+    # Permitimos que falle en tiempo de llamada, pero dejamos un mensaje claro en logs
+    print("⚠️  OPENAI_API_KEY no encontrado en entorno (.env). Define OPENAI_API_KEY u OPENAI_API_KEY_SK.")
+
+# Inicializar cliente con API Key explícita (si no, OpenAI intentará leer del entorno igualmente)
+client = OpenAI(api_key=_api_key)
 
 def fetch_openai_response(prompt: str, model: str = "gpt-4o-mini") -> Tuple[str, Dict[str, Any]]:
     """
